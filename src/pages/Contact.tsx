@@ -111,7 +111,7 @@ export const Contact: React.FC = () => {
                 <div>
                   <h3 className="font-semibold text-plum-950 dark:text-ivory-50">Official Email</h3>
                   <p className="text-plum-700 dark:text-ivory-300 mt-0.5 font-mono">
-                    anvaya@kit-tiptur.ac.in
+                    clubanvaya@gmail.com
                   </p>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export const Contact: React.FC = () => {
                 <div>
                   <h3 className="font-semibold text-plum-950 dark:text-ivory-50">Department Desk</h3>
                   <p className="text-plum-700 dark:text-ivory-300 mt-0.5 font-mono">
-                    +91 8134 251267
+                    +91 8431 674384
                   </p>
                 </div>
               </div>
@@ -136,7 +136,7 @@ export const Contact: React.FC = () => {
               </h3>
               <div className="flex items-center gap-2">
                 <a
-                  href="https://instagram.com/anvaya_kit"
+                  href="https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr"
                   target="_blank"
                   rel="noreferrer"
                   className="p-2.5 rounded-xl bg-ivory-100 dark:bg-plum-800 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"
@@ -163,7 +163,7 @@ export const Contact: React.FC = () => {
                   <LinkedinIcon className="w-4 h-4" />
                 </a>
                 <a
-                  href="https://github.com/anvaya-kit"
+                  href="https://github.com/anvayaclub"
                   target="_blank"
                   rel="noreferrer"
                   className="p-2.5 rounded-xl bg-ivory-100 dark:bg-plum-800 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"

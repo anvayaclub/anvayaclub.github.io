@@ -8,13 +8,13 @@ export const AdminSettings: React.FC = () => {
   const [clubName, setClubName] = useState('Anvaya');
   const [institutionName, setInstitutionName] = useState('Kalpataru Institute of Technology, Tiptur');
   const [departmentName, setDepartmentName] = useState('Department of Information Science and Engineering');
-  const [contactEmail, setContactEmail] = useState('anvaya@kit-tiptur.ac.in');
-  const [contactPhone, setContactPhone] = useState('+91 8134 251267');
+  const [contactEmail, setContactEmail] = useState('clubanvaya@gmail.com');
+  const [contactPhone, setContactPhone] = useState('+91 8431 674384');
   const [address, setAddress] = useState('KIT Campus, B.H. Road, Tiptur, Tumakuru District, Karnataka - 572201');
-  const [instagram, setInstagram] = useState('https://instagram.com/anvaya_kit');
+  const [instagram, setInstagram] = useState('https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr');
   const [youtube, setYoutube] = useState('https://youtube.com/@anvaya_kit');
   const [linkedin, setLinkedin] = useState('https://linkedin.com/company/anvaya-kit');
-  const [github, setGithub] = useState('https://github.com/anvaya-kit');
+  const [github, setGithub] = useState('https://github.com/anvayaclub');
   const [mapUrl, setMapUrl] = useState('https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur');
 
   const [loading, setLoading] = useState(true);
@@ -30,8 +30,8 @@ export const AdminSettings: React.FC = () => {
           setClubName(d.clubName || 'Anvaya');
           setInstitutionName(d.institutionName || 'Kalpataru Institute of Technology, Tiptur');
           setDepartmentName(d.departmentName || 'Department of Information Science and Engineering');
-          setContactEmail(d.contactEmail || 'anvaya@kit-tiptur.ac.in');
-          setContactPhone(d.contactPhone || '+91 8134 251267');
+          setContactEmail(d.contactEmail || 'clubanvaya@gmail.com');
+          setContactPhone(d.contactPhone || '+91 8431 674384');
           setAddress(d.address || 'KIT Campus, B.H. Road, Tiptur, Tumakuru District, Karnataka - 572201');
           setInstagram(d.socialLinks?.instagram || '');
           setYoutube(d.socialLinks?.youtube || '');

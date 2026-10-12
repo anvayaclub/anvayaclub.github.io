@@ -48,7 +48,7 @@ export const Footer: React.FC = () => {
             </p>
             <div className="flex items-center gap-3 pt-2">
               <a
-                href="https://instagram.com/anvaya_kit"
+                href="https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-xl bg-ivory-200/80 dark:bg-plum-900/80 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"
@@ -75,7 +75,7 @@ export const Footer: React.FC = () => {
                 <LinkedinIcon className="w-4 h-4" />
               </a>
               <a
-                href="https://github.com/anvaya-kit"
+                href="https://github.com/anvayaclub"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-xl bg-ivory-200/80 dark:bg-plum-900/80 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"
@@ -194,7 +194,7 @@ export const Footer: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5">
                 <Mail className="w-3 h-3 text-gold-500 flex-shrink-0" />
-                <span>anvaya@kit-tiptur.ac.in</span>
+                <span>clubanvaya@gmail.com</span>
               </div>
             </div>
           </div>
