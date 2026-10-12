@@ -1,6 +1,18 @@
-const CONFIGURED_API_BASE = import.meta.env.VITE_API_BASE_URL;
+const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
 const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
-const API_BASE = CONFIGURED_API_BASE || (isGitHubPages ? '' : '/api');
+
+function normalizeApiBase(base: string): string {
+  if (!base) return isGitHubPages ? '' : '/api';
+  // Strip trailing slashes
+  const clean = base.replace(/\/+$/, '');
+  // If the base URL does not end with /api, append /api
+  if (!clean.endsWith('/api')) {
+    return `${clean}/api`;
+  }
+  return clean;
+}
+
+const API_BASE = normalizeApiBase(rawApiBase);
 
 export function getToken(): string | null {
   return localStorage.getItem('anvaya_auth_token');
@@ -17,7 +29,7 @@ export function removeToken(): void {
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   // If hosted on GitHub Pages but backend API is not yet configured
-  if (isGitHubPages && !CONFIGURED_API_BASE) {
+  if (isGitHubPages && !rawApiBase) {
     throw new Error(
       'Backend API is not configured for this deployment. Please set the VITE_API_BASE_URL repository secret in GitHub with your deployed backend URL (e.g. https://your-backend.vercel.app/api).'
     );
@@ -308,7 +320,7 @@ export const api = {
 
   // Upload file (cover images, team photos, gallery media)
   uploadFile: async (file: File): Promise<{ success: boolean; fileUrl: string; filename: string }> => {
-    if (isGitHubPages && !CONFIGURED_API_BASE) {
+    if (isGitHubPages && !rawApiBase) {
       throw new Error('Media upload requires a deployed backend API. Please configure VITE_API_BASE_URL.');
     }
 

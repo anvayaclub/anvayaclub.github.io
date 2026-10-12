@@ -42,10 +42,11 @@ export const AdminLogin: React.FC = () => {
           setDatabaseConnected(res.databaseConnected);
           if (res.message) setDbMessage(res.message);
         }
-      } catch {
+      } catch (err: any) {
         if (isMounted) {
           setSetupAvailable(false);
           setDatabaseConnected(false);
+          setDbMessage(err.message || 'Unable to connect to the backend server. Please verify your backend deployment.');
         }
       }
     };
