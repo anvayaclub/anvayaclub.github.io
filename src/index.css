@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-plum-950: 14 5 21;
+    --color-plum-900: 25 11 36;
+    --color-ivory-50: 253 251 247;
+    --color-gold-500: 201 152 27;
+  }
+
+  body {
+    @apply font-sans antialiased;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: 'Cinzel', 'Playfair Display', serif;
+    letter-spacing: 0.02em;
+  }
+}
+
+/* Custom scrollbar for modern browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 130, 170, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 130, 170, 0.45);
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Glassmorphism and refined borders */
+.glass-panel {
+  @apply bg-white/70 dark:bg-plum-900/60 backdrop-blur-md border border-ivory-300/40 dark:border-plum-800/50 shadow-sm;
+}
+
+.glass-card {
+  @apply bg-white/80 dark:bg-plum-900/80 backdrop-blur-sm border border-ivory-200/80 dark:border-plum-800/80 shadow-md hover:shadow-lg transition-all duration-300;
+}
+
+/* Subtle decorative cultural motif pattern */
+.bg-cultural-pattern {
+  background-image: radial-gradient(rgba(201, 152, 27, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
