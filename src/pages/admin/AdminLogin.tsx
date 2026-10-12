@@ -66,6 +66,14 @@ export const AdminLogin: React.FC = () => {
     try {
       const res = await login(identifier.trim(), password);
       if (res.success) {
+        const role = (res.user?.role || '').toLowerCase();
+        if (role !== 'technical' && role !== 'admin' && role !== 'media-poster') {
+          error(
+            `Access Restricted: Your account has role '${role.toUpperCase()}'. Committee positions and students do not have administrative dashboard privileges.`
+          );
+          navigate('/');
+          return;
+        }
         success('Welcome to the Anvaya Administration Dashboard.');
         navigate('/admin');
       } else {

@@ -4,6 +4,7 @@ import { memoryStore, SYSTEM_PERMISSIONS } from '../services/store.js';
 import { Role } from '../models/Role.js';
 import { User } from '../models/User.js';
 import { isDbConnected } from '../config/db.js';
+import { isCommitteeRole } from '../constants/roles.js';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -57,7 +58,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       permissions = SYSTEM_PERMISSIONS.map(p => p.id);
     } else if (userRole === 'media-poster') {
       permissions = ['manage_gallery'];
-    } else if (userRole === 'student') {
+    } else if (userRole === 'student' || isCommitteeRole(userRole)) {
+      // Explicitly non-administrative: students and all committee positions have zero admin permissions
       permissions = [];
     } else {
       // Custom role lookup

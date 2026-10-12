@@ -2,10 +2,29 @@ import { Request, Response } from 'express';
 import { Role } from '../models/Role.js';
 import { isDbConnected } from '../config/db.js';
 import { memoryStore, SYSTEM_PERMISSIONS } from '../services/store.js';
+import { ALL_STANDARD_ROLES, ALL_STANDARD_ROLE_KEYS } from '../constants/roles.js';
+
+export const ensureDefaultRolesInDb = async () => {
+  if (!isDbConnected()) return;
+  for (const r of ALL_STANDARD_ROLES) {
+    const exists = await Role.findOne({ key: r.key });
+    if (!exists) {
+      await Role.create({
+        name: r.name,
+        key: r.key,
+        description: r.description,
+        permissions: r.key === 'technical' ? SYSTEM_PERMISSIONS.map(p => p.id) : (r.key === 'media-poster' ? ['manage_gallery'] : []),
+        isSystem: true,
+        isActive: true,
+      });
+    }
+  }
+};
 
 export const getRoles = async (_req: Request, res: Response): Promise<void> => {
   try {
     if (isDbConnected()) {
+      await ensureDefaultRolesInDb();
       const roles = await Role.find().sort({ isSystem: -1, createdAt: 1 });
       res.json({ success: true, data: roles });
     } else {
@@ -31,8 +50,8 @@ export const createRole = async (req: Request, res: Response): Promise<void> => 
 
     const normalizedKey = key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
 
-    if (['technical', 'admin', 'media-poster', 'student'].includes(normalizedKey)) {
-      res.status(400).json({ success: false, message: 'Cannot override built-in system role keys.' });
+    if (ALL_STANDARD_ROLE_KEYS.includes(normalizedKey) || ['admin'].includes(normalizedKey)) {
+      res.status(400).json({ success: false, message: `Cannot override built-in role key '${normalizedKey}'.` });
       return;
     }
 
@@ -143,8 +162,8 @@ export const deleteRole = async (req: Request, res: Response): Promise<void> => 
         return;
       }
 
-      if (role.isSystem) {
-        res.status(400).json({ success: false, message: 'System roles cannot be deleted.' });
+      if (role.isSystem || ALL_STANDARD_ROLE_KEYS.includes(role.key)) {
+        res.status(400).json({ success: false, message: 'Built-in system and committee roles cannot be deleted.' });
         return;
       }
 
@@ -157,8 +176,8 @@ export const deleteRole = async (req: Request, res: Response): Promise<void> => 
         return;
       }
 
-      if (memoryStore.roles[idx].isSystem) {
-        res.status(400).json({ success: false, message: 'System roles cannot be deleted.' });
+      if (memoryStore.roles[idx].isSystem || ALL_STANDARD_ROLE_KEYS.includes(memoryStore.roles[idx].key)) {
+        res.status(400).json({ success: false, message: 'Built-in system and committee roles cannot be deleted.' });
         return;
       }
 

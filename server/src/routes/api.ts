@@ -148,6 +148,7 @@ router.get('/certificates/admin/configs/:id/backup', authenticateToken, requireT
 // 6. Student Projects & Showcase
 router.get('/projects', getProjects);
 router.get('/projects/my', authenticateToken, getMyProjects);
+router.get('/projects/my-projects', authenticateToken, getMyProjects);
 router.post('/projects', authenticateToken, createProject);
 router.put('/projects/:id', authenticateToken, updateProject);
 router.delete('/projects/:id', authenticateToken, deleteProject);

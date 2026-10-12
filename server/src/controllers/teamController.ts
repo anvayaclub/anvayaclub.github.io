@@ -3,6 +3,11 @@ import { TeamMember } from '../models/TeamMember.js';
 import { User } from '../models/User.js';
 import { isDbConnected } from '../config/db.js';
 import { memoryStore } from '../services/store.js';
+import {
+  ALL_STANDARD_ROLE_KEYS,
+  normalizeRoleKey,
+  formatRoleDesignation,
+} from '../constants/roles.js';
 
 export const getTeam = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -52,13 +57,14 @@ export const createTeamMember = async (req: Request, res: Response): Promise<voi
       isActive,
     } = req.body;
 
-    if (!name || !role) {
+    if (!name || (!role && !appRole)) {
       res.status(400).json({ success: false, message: 'Member full name and committee role/designation are required.' });
       return;
     }
 
     const normalizedUsn = usn ? usn.trim().toUpperCase() : undefined;
-    const assignedAppRole = appRole || 'student';
+    const assignedAppRole = normalizeRoleKey(appRole || 'student');
+    const finalDesignation = (role && role.trim()) ? role.trim() : formatRoleDesignation(role, assignedAppRole);
 
     if (isDbConnected()) {
       let linkedUser: any = null;
@@ -78,7 +84,7 @@ export const createTeamMember = async (req: Request, res: Response): Promise<voi
       const member = await TeamMember.create({
         name: name.trim(),
         usn: normalizedUsn,
-        role: role.trim(),
+        role: finalDesignation,
         appRole: assignedAppRole,
         department: department || 'ISE',
         academicYear: academicYear || 'Final Year',
@@ -127,7 +133,7 @@ export const createTeamMember = async (req: Request, res: Response): Promise<voi
         id: memberId,
         name: name.trim(),
         usn: normalizedUsn,
-        role: role.trim(),
+        role: finalDesignation,
         appRole: assignedAppRole,
         department: department || 'ISE',
         academicYear: academicYear || 'Final Year',
@@ -178,11 +184,30 @@ export const updateTeamMember = async (req: Request, res: Response): Promise<voi
 
       // Check USN changes or role changes
       const targetUsn = updateData.usn !== undefined ? updateData.usn : member.usn;
-      const targetAppRole = updateData.appRole !== undefined ? updateData.appRole : member.appRole;
+      let targetAppRole = member.appRole;
+      if (updateData.appRole !== undefined) {
+        targetAppRole = normalizeRoleKey(updateData.appRole);
+        updateData.appRole = targetAppRole;
+      }
+
+      if (updateData.role !== undefined && updateData.role.trim()) {
+        updateData.role = updateData.role.trim();
+      } else if (updateData.appRole !== undefined && (!member.role || !member.role.trim())) {
+        updateData.role = formatRoleDesignation('', targetAppRole);
+      }
 
       if (targetUsn) {
         const linkedUser = await User.findOne({ usn: targetUsn });
         if (linkedUser) {
+          // Prevent accidentally demoting the sole active technical admin
+          if (linkedUser.role === 'technical' && targetAppRole !== 'technical') {
+            const technicalCount = await User.countDocuments({ role: 'technical', status: 'active' });
+            if (technicalCount <= 1) {
+              res.status(400).json({ success: false, message: 'Cannot demote the sole active Technical Administrator.' });
+              return;
+            }
+          }
+
           updateData.linkedUserId = linkedUser._id;
           updateData.accountLinkStatus = 'linked';
           linkedUser.role = targetAppRole;
@@ -207,11 +232,30 @@ export const updateTeamMember = async (req: Request, res: Response): Promise<voi
 
       const member = memoryStore.teamMembers[index];
       const targetUsn = updateData.usn !== undefined ? updateData.usn : member.usn;
-      const targetAppRole = updateData.appRole !== undefined ? updateData.appRole : member.appRole;
+      let targetAppRole = member.appRole;
+      if (updateData.appRole !== undefined) {
+        targetAppRole = normalizeRoleKey(updateData.appRole);
+        updateData.appRole = targetAppRole;
+      }
+
+      if (updateData.role !== undefined && updateData.role.trim()) {
+        updateData.role = updateData.role.trim();
+      } else if (updateData.appRole !== undefined && (!member.role || !member.role.trim())) {
+        updateData.role = formatRoleDesignation('', targetAppRole);
+      }
 
       if (targetUsn) {
         const linkedUser = memoryStore.users.find(u => u.usn?.toUpperCase() === targetUsn);
         if (linkedUser) {
+          // Prevent demoting sole active technical admin in memory
+          if (linkedUser.role === 'technical' && targetAppRole !== 'technical') {
+            const technicalCount = memoryStore.users.filter(u => u.role === 'technical' && u.status === 'active').length;
+            if (technicalCount <= 1) {
+              res.status(400).json({ success: false, message: 'Cannot demote the sole active Technical Administrator.' });
+              return;
+            }
+          }
+
           updateData.linkedUserId = linkedUser._id || linkedUser.id;
           updateData.accountLinkStatus = 'linked';
           linkedUser.role = targetAppRole;

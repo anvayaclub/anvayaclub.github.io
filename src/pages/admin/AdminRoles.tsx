@@ -25,6 +25,7 @@ import {
 import { api } from '../../services/api';
 import { RoleItem, PermissionItem, User, AuditLogItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { COMMITTEE_ROLES, isCommitteeRole } from '../../constants/roles';
 
 export const AdminRoles: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'audit'>('users');
@@ -431,9 +432,16 @@ export const AdminRoles: React.FC = () => {
                 className="px-3 py-2 rounded-xl text-xs bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 focus:outline-none text-plum-950 dark:text-ivory-50"
               >
                 <option value="all">All Roles</option>
-                <option value="technical">Technical</option>
-                <option value="media-poster">Media Poster</option>
-                <option value="student">Student</option>
+                <optgroup label="System Roles">
+                  <option value="technical">Technical</option>
+                  <option value="media-poster">Media Poster</option>
+                  <option value="student">Student</option>
+                </optgroup>
+                <optgroup label="Committee Roles">
+                  {COMMITTEE_ROLES.map(cr => (
+                    <option key={cr.key} value={cr.key}>{cr.name}</option>
+                  ))}
+                </optgroup>
               </select>
 
               <select
@@ -851,10 +859,17 @@ export const AdminRoles: React.FC = () => {
                       onChange={e => setNewUserRole(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50"
                     >
-                      <option value="student">Student (Standard)</option>
-                      <option value="media-poster">Media Poster (Gallery Access)</option>
-                      <option value="technical">Technical Administrator</option>
-                      {roles.filter(r => !r.isSystem).map(r => (
+                      <optgroup label="Committee Positions (Non-Administrative)">
+                        {COMMITTEE_ROLES.map(cr => (
+                          <option key={cr.key} value={cr.key}>{cr.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="System Access Roles">
+                        <option value="student">Student (Standard Member)</option>
+                        <option value="media-poster">Media Poster (Gallery Access)</option>
+                        <option value="technical">Technical Administrator</option>
+                      </optgroup>
+                      {roles.filter(r => !r.isSystem && !COMMITTEE_ROLES.some(c => c.key === r.key)).map(r => (
                         <option key={r.key} value={r.key}>{r.name} (Custom)</option>
                       ))}
                     </select>
@@ -942,10 +957,17 @@ export const AdminRoles: React.FC = () => {
                   onChange={e => setTargetRole(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 font-semibold"
                 >
-                  <option value="student">student (Standard member)</option>
-                  <option value="media-poster">media-poster (Gallery admin)</option>
-                  <option value="technical">technical (Superuser admin)</option>
-                  {roles.filter(r => !r.isSystem).map(r => (
+                  <optgroup label="Committee Positions (Non-Administrative)">
+                    {COMMITTEE_ROLES.map(cr => (
+                      <option key={cr.key} value={cr.key}>{cr.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="System Access Roles">
+                    <option value="student">student (Standard member)</option>
+                    <option value="media-poster">media-poster (Gallery admin)</option>
+                    <option value="technical">technical (Superuser admin)</option>
+                  </optgroup>
+                  {roles.filter(r => !r.isSystem && !COMMITTEE_ROLES.some(c => c.key === r.key)).map(r => (
                     <option key={r.key} value={r.key}>{r.name} (Custom)</option>
                   ))}
                 </select>

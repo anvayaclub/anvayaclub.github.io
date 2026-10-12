@@ -327,4 +327,176 @@ describe('Anvaya Cultural Committee API Test Suite', () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
   });
+
+  // 11. EIGHT COMMITTEE ROLES & PERMISSIONS TEST SUITE
+  const committeePositions = [
+    { key: 'president', name: 'President', designation: 'President' },
+    { key: 'vice-president', name: 'Vice President', designation: 'Vice President' },
+    { key: 'secretary', name: 'Secretary', designation: 'Secretary' },
+    { key: 'treasurer', name: 'Treasurer', designation: 'Treasurer' },
+    { key: 'speaker', name: 'Speaker', designation: 'Speaker' },
+    { key: 'cultural', name: 'Cultural', designation: 'Cultural' },
+    { key: 'sports', name: 'Sports', designation: 'Sports' },
+    { key: 'event-management', name: 'Event Management', designation: 'Event Management' },
+  ];
+
+  it('GET /api/roles should return all eight committee positions along with system roles', async () => {
+    const res = await request(app)
+      .get('/api/roles')
+      .set('Authorization', `Bearer ${technicalToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const keys = res.body.data.map((r: any) => r.key);
+    for (const cp of committeePositions) {
+      expect(keys).toContain(cp.key);
+    }
+    expect(keys).toContain('technical');
+    expect(keys).toContain('media-poster');
+    expect(keys).toContain('student');
+  });
+
+  it('POST /api/team should allow Technical Admin to assign each of the 8 committee positions', async () => {
+    let orderNum = 10;
+    for (const cp of committeePositions) {
+      orderNum++;
+      const res = await request(app)
+        .post('/api/team')
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({
+          name: `Leader ${cp.name}`,
+          usn: `1KI24IS0${orderNum}`,
+          role: cp.designation,
+          appRole: cp.key,
+          department: 'ISE',
+          academicYear: 'Final Year',
+          bio: `Dedicated committee member serving as ${cp.name}.`,
+          order: orderNum,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.appRole).toBe(cp.key);
+      expect(res.body.data.role).toBe(cp.designation);
+    }
+  });
+
+  it('GET /api/team should return correct public designations for all committee members', async () => {
+    const res = await request(app).get('/api/team');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const rolesList = res.body.data.map((m: any) => m.role);
+    for (const cp of committeePositions) {
+      expect(rolesList).toContain(cp.designation);
+    }
+  });
+
+  // Verify Committee Member (e.g. President) Privileges and Restrictions
+  let presidentToken = '';
+  const presidentUsn = '1KI24IS099';
+
+  it('POST /api/users should allow Technical Admin to create a user account with President role', async () => {
+    const res = await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${technicalToken}`)
+      .send({
+        name: 'Darshan G',
+        usn: presidentUsn,
+        email: 'darshan@kit-tiptur.ac.in',
+        role: 'president',
+        branch: 'ISE',
+        temporaryPassword: 'PresidentPassword2026!',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.user.role).toBe('president');
+  });
+
+  it('POST /api/auth/login should authenticate President and return empty admin permissions', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({
+        identifier: presidentUsn,
+        password: 'PresidentPassword2026!',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.user.role).toBe('president');
+    expect(res.body.user.permissions).toEqual([]); // Zero administrative permissions!
+    presidentToken = res.body.token;
+  });
+
+  it('SECURITY: Committee member (President) must be DENIED access to Admin Dashboard endpoints', async () => {
+    // 1. Cannot fetch admin users
+    const resUsers = await request(app)
+      .get('/api/users')
+      .set('Authorization', `Bearer ${presidentToken}`);
+    expect(resUsers.status).toBe(403);
+
+    // 2. Cannot create events
+    const resEvent = await request(app)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${presidentToken}`)
+      .send({ title: 'Hacked Event', summary: 'test', description: 'test', dateTime: '2026-12-01' });
+    expect(resEvent.status).toBe(403);
+
+    // 3. Cannot manage roles
+    const resRole = await request(app)
+      .post('/api/roles')
+      .set('Authorization', `Bearer ${presidentToken}`)
+      .send({ name: 'Hacked Role', key: 'hacked', description: 'test' });
+    expect(resRole.status).toBe(403);
+
+    // 4. Cannot manage committee members
+    const resTeam = await request(app)
+      .post('/api/team')
+      .set('Authorization', `Bearer ${presidentToken}`)
+      .send({ name: 'Hacked Member', role: 'President' });
+    expect(resTeam.status).toBe(403);
+
+    // 5. Cannot modify other users' roles
+    const resUserRole = await request(app)
+      .patch(`/api/users/${createdUserId}/role`)
+      .set('Authorization', `Bearer ${presidentToken}`)
+      .send({ role: 'technical' });
+    expect(resUserRole.status).toBe(403);
+  });
+
+  it('ALLOWED: Committee member (President) can manage their OWN projects', async () => {
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${presidentToken}`)
+      .send({
+        title: 'Cultural Event Mobile App',
+        summary: 'Mobile guide for annual inter-college fest.',
+        description: 'React Native application with real-time schedule, campus map, and live voting.',
+        category: 'Creative Tech',
+        techStack: 'React Native, TypeScript',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.title).toBe('Cultural Event Mobile App');
+
+    // Retrieve personal projects
+    const myProjectsRes = await request(app)
+      .get('/api/projects/my-projects')
+      .set('Authorization', `Bearer ${presidentToken}`);
+    expect(myProjectsRes.status).toBe(200);
+    expect(myProjectsRes.body.data.length).toBeGreaterThan(0);
+  });
+
+  it('ALLOWED: Committee member (President) can use the public Certificate Portal', async () => {
+    const res = await request(app)
+      .post('/api/certificates/verify')
+      .send({
+        configId: 'cert_1',
+        fullName: 'Adithya K S',
+        usn: '1KI22IS001',
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
 });
+

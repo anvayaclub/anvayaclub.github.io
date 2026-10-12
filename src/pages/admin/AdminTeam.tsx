@@ -20,6 +20,12 @@ import {
 import { api } from '../../services/api';
 import { TeamMember, RoleItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import {
+  COMMITTEE_ROLES,
+  SYSTEM_ROLES,
+  formatRoleDesignation,
+  isCommitteeRole,
+} from '../../constants/roles';
 
 export const AdminTeam: React.FC = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -138,6 +144,16 @@ export const AdminTeam: React.FC = () => {
     }
   };
 
+  const handleAppRoleChange = (newRoleKey: string) => {
+    setAppRole(newRoleKey);
+    const commDef = COMMITTEE_ROLES.find(c => c.key === newRoleKey);
+    if (commDef) {
+      if (!role || COMMITTEE_ROLES.some(c => c.designation.toLowerCase() === role.trim().toLowerCase())) {
+        setRole(commDef.designation);
+      }
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -158,7 +174,8 @@ export const AdminTeam: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !role) {
+    const finalDesignation = (role && role.trim()) ? role.trim() : formatRoleDesignation(role, appRole);
+    if (!name || !finalDesignation) {
       error('Full Name and Committee Role are required.');
       return;
     }
@@ -168,7 +185,7 @@ export const AdminTeam: React.FC = () => {
       const payload = {
         name,
         usn: usn.trim().toUpperCase(),
-        role,
+        role: finalDesignation,
         appRole,
         department,
         academicYear,
@@ -299,7 +316,15 @@ export const AdminTeam: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-4">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-ivory-200 dark:bg-plum-800 text-gold-700 dark:text-gold-400">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-semibold ${
+                          m.appRole === 'technical'
+                            ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+                            : m.appRole === 'media-poster'
+                            ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30'
+                            : isCommitteeRole(m.appRole || '')
+                            ? 'bg-gold-500/15 text-gold-700 dark:text-gold-300 border border-gold-500/30'
+                            : 'bg-ivory-200 dark:bg-plum-800 text-gray-600 dark:text-gray-300'
+                        }`}>
                           <ShieldCheck className="w-3 h-3 text-gold-500" />
                           {m.appRole || 'student'}
                         </span>
@@ -432,12 +457,21 @@ export const AdminTeam: React.FC = () => {
                   </label>
                   <input
                     type="text"
+                    list="committee-designations-list"
                     value={role}
                     onChange={e => setRole(e.target.value)}
-                    placeholder="e.g. President / Media Lead / Cultural Secretary"
-                    className="w-full px-3.5 py-2 rounded-xl border border-ivory-300 dark:border-plum-700 bg-white dark:bg-plum-950/60 text-plum-950 dark:text-ivory-50 text-xs focus:outline-none"
+                    placeholder="e.g. President / Vice President / Secretary"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-plum-700 bg-white dark:bg-plum-950/60 text-plum-950 dark:text-ivory-50 text-xs focus:outline-none"
                     required
                   />
+                  <datalist id="committee-designations-list">
+                    {COMMITTEE_ROLES.map(cr => (
+                      <option key={cr.key} value={cr.designation} />
+                    ))}
+                  </datalist>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    Public title displayed on the public Team page.
+                  </p>
                 </div>
 
                 <div>
@@ -446,20 +480,38 @@ export const AdminTeam: React.FC = () => {
                   </label>
                   <select
                     value={appRole}
-                    onChange={e => setAppRole(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-ivory-300 dark:border-plum-700 bg-white dark:bg-plum-950/60 text-plum-950 dark:text-ivory-50 text-xs font-mono focus:outline-none"
+                    onChange={e => handleAppRoleChange(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-ivory-300 dark:border-plum-700 bg-white dark:bg-plum-950/60 text-plum-950 dark:text-ivory-50 text-xs font-semibold focus:outline-none"
                   >
-                    <option value="student">student (Standard member)</option>
-                    <option value="media-poster">media-poster (Gallery coordinator)</option>
-                    <option value="technical">technical (Full administrator)</option>
+                    <optgroup label="Committee Positions (Non-Administrative)">
+                      {COMMITTEE_ROLES.map(cr => (
+                        <option key={cr.key} value={cr.key}>
+                          {cr.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="System Access Roles">
+                      <option value="student">Student (Standard Member)</option>
+                      <option value="media-poster">Media Poster (Gallery Access Only)</option>
+                      <option value="technical">Technical (Full Administrator)</option>
+                    </optgroup>
                     {roles
-                      .filter(r => !['technical', 'media-poster', 'student'].includes(r.key))
+                      .filter(r => !['technical', 'media-poster', 'student', ...COMMITTEE_ROLES.map(c => c.key)].includes(r.key))
                       .map(r => (
                         <option key={r.key} value={r.key}>
-                          {r.key} ({r.name})
+                          {r.name} ({r.key})
                         </option>
                       ))}
                   </select>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    {isCommitteeRole(appRole)
+                      ? 'Committee member privileges: self-service projects & public features. No admin portal access.'
+                      : appRole === 'technical'
+                      ? 'Full superuser privileges across all modules.'
+                      : appRole === 'media-poster'
+                      ? 'Gallery publication and media management only.'
+                      : 'Standard student member privileges.'}
+                  </p>
                 </div>
               </div>
 

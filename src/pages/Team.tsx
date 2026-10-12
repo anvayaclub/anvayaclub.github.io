@@ -3,6 +3,7 @@ import { Mail, Users, Loader2 } from 'lucide-react';
 import { LinkedinIcon, GithubIcon, InstagramIcon } from '../components/common/SocialIcons';
 import { api } from '../services/api';
 import { TeamMember } from '../types';
+import { formatRoleDesignation } from '../constants/roles';
 
 export const Team: React.FC = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -85,7 +86,7 @@ export const Team: React.FC = () => {
                     {member.name}
                   </h3>
                   <div className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gold-500/15 text-gold-700 dark:text-gold-300 border border-gold-500/30">
-                    {member.role}
+                    {formatRoleDesignation(member.role, member.appRole)}
                   </div>
                   <div className="text-[11px] font-medium text-plum-600 dark:text-ivory-400">
                     {member.academicYear} · ISE Department

@@ -10,6 +10,13 @@ import { isDbConnected } from '../config/db.js';
 import { memoryStore, SYSTEM_PERMISSIONS } from '../services/store.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { recordFailedLoginAttempt, resetLoginAttempts } from '../middleware/rateLimiter.js';
+import {
+  ALL_STANDARD_ROLES,
+  ALL_STANDARD_ROLE_KEYS,
+  normalizeRoleKey,
+  isCommitteeRole,
+  formatRoleDesignation,
+} from '../constants/roles.js';
 
 // Mutex lock to protect initial bootstrap against concurrent race conditions
 let isSetupInProgress = false;
@@ -746,7 +753,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const normalizedEmail = email && email.trim() ? email.trim().toLowerCase() : undefined;
-    const assignedRole = role && role.trim() ? role.trim() : 'student';
+    const assignedRole = normalizeRoleKey(role || 'student');
 
     // Generate or use temporary password
     const tempPassword = temporaryPassword && temporaryPassword.trim()
@@ -886,7 +893,13 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const newRole = role.trim();
+    const newRole = normalizeRoleKey(role);
+
+    // Prevent non-technical users from modifying any account roles
+    if (req.user?.role !== 'technical' && req.user?.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Forbidden. Only Technical Administrators can adjust user roles.' });
+      return;
+    }
 
     if (isDbConnected()) {
       const targetUser = await User.findById(id);
@@ -895,7 +908,16 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
         return;
       }
 
-      // Prevent demoting the last technical administrator
+      // Prevent user from demoting their own Technical Administrator account
+      if (req.user?.id === targetUser._id.toString() && targetUser.role === 'technical' && newRole !== 'technical') {
+        res.status(400).json({
+          success: false,
+          message: 'You cannot demote your own Technical Administrator account.',
+        });
+        return;
+      }
+
+      // Prevent demoting the last active technical administrator
       if (targetUser.role === 'technical' && newRole !== 'technical') {
         const technicalCount = await User.countDocuments({ role: 'technical', status: 'active' });
         if (technicalCount <= 1) {
@@ -913,7 +935,11 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
 
       // Update linked TeamMember appRole if present
       if (targetUser.usn) {
-        await TeamMember.updateMany({ usn: targetUser.usn }, { appRole: newRole });
+        const teamUpdates: any = { appRole: newRole };
+        if (isCommitteeRole(newRole)) {
+          teamUpdates.role = formatRoleDesignation('', newRole);
+        }
+        await TeamMember.updateMany({ usn: targetUser.usn }, teamUpdates);
       }
 
       // Record Audit
@@ -942,6 +968,14 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
         return;
       }
 
+      if (req.user?.id === (targetUser._id || targetUser.id) && targetUser.role === 'technical' && newRole !== 'technical') {
+        res.status(400).json({
+          success: false,
+          message: 'You cannot demote your own Technical Administrator account.',
+        });
+        return;
+      }
+
       if (targetUser.role === 'technical' && newRole !== 'technical') {
         const technicalCount = memoryStore.users.filter(u => u.role === 'technical' && u.status === 'active').length;
         if (technicalCount <= 1) {
@@ -961,6 +995,9 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
         memoryStore.teamMembers.forEach(tm => {
           if (tm.usn?.toUpperCase() === targetUser.usn?.toUpperCase()) {
             tm.appRole = newRole;
+            if (isCommitteeRole(newRole)) {
+              tm.role = formatRoleDesignation('', newRole);
+            }
           }
         });
       }

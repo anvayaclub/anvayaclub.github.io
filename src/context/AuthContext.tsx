@@ -11,7 +11,7 @@ interface AuthContextType {
   isMediaPoster: boolean;
   isStudent: boolean;
   hasPermission: (permission: string) => boolean;
-  login: (identifier: string, password: string) => Promise<{ success: boolean; message: string }>;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; message: string; user?: User }>;
   signup: (data: { name: string; usn: string; email?: string; password: string; branch?: string; semester?: string }) => Promise<{ success: boolean; message: string }>;
   setupTechnicalAdmin: (data: { name: string; usn: string; email?: string; password: string; confirmPassword: string }) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTokenState(res.token);
         setUser(res.user);
         localStorage.setItem('anvaya_auth_user', JSON.stringify(res.user));
-        return { success: true, message: res.message || 'Login successful.' };
+        return { success: true, message: res.message || 'Login successful.', user: res.user };
       }
       return { success: false, message: res.message || 'Authentication failed.' };
     } catch (err: any) {
