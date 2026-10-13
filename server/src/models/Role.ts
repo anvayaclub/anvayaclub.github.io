@@ -20,4 +20,7 @@ const RoleSchema = new Schema<IRoleDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+RoleSchema.set('toJSON', { virtuals: true });
+RoleSchema.set('toObject', { virtuals: true });
+
 export const Role = mongoose.model<IRoleDocument>('Role', RoleSchema);

@@ -87,7 +87,7 @@ export const AdminCertificates: React.FC = () => {
   };
 
   const openEditConfig = (c: CertificateConfig) => {
-    setEditingConfigId(c.id);
+    setEditingConfigId((c as any)._id || c.id);
     setEventTitle(c.eventTitle);
     setEventDate(c.eventDate);
     setCertificateTitle(c.certificateTitle);
@@ -154,15 +154,27 @@ export const AdminCertificates: React.FC = () => {
     }
   };
 
-  const handleDeleteConfig = async (id: string, evTitle: string) => {
-    if (!window.confirm(`Are you sure you want to delete certificates for "${evTitle}" and all participant lists?`)) {
+  const handleDeleteConfig = async (cfg: CertificateConfig) => {
+    const configId = (cfg as any)._id || cfg.id;
+    if (!configId) {
+      error('Invalid certificate configuration identifier.');
+      return;
+    }
+
+    const hasRecords = (cfg.participantsCount && cfg.participantsCount > 0);
+    const confirmMessage = hasRecords
+      ? `WARNING: Certificate configuration "${cfg.eventTitle}" has ${cfg.participantsCount} participant record(s). Deleting it will permanently delete these certificates. Are you sure you want to proceed?`
+      : `Are you sure you want to delete certificate configuration "${cfg.eventTitle}"?`;
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      const res = await api.certificates.deleteConfig(id);
+      const res = await api.certificates.deleteConfig(configId, !!hasRecords);
       if (res.success) {
         success(res.message);
+        setConfigs(prev => prev.filter(c => ((c as any)._id !== configId && c.id !== configId)));
         fetchConfigs();
       }
     } catch (err: any) {
@@ -171,10 +183,11 @@ export const AdminCertificates: React.FC = () => {
   };
 
   const openParticipants = async (c: CertificateConfig) => {
+    const configId = (c as any)._id || c.id;
     setActiveConfig(c);
     setParticipantsModalOpen(true);
     setParticipantSearch('');
-    fetchParticipants(c.id);
+    fetchParticipants(configId);
   };
 
   const fetchParticipants = async (configId: string, search?: string) => {
@@ -382,7 +395,7 @@ export const AdminCertificates: React.FC = () => {
                     </td>
                     <td className="px-5 py-3.5 text-right space-x-2">
                       <button
-                        onClick={() => handleExportBackup(cfg.id, cfg.eventTitle)}
+                        onClick={() => handleExportBackup((cfg as any)._id || cfg.id, cfg.eventTitle)}
                         className="p-1.5 rounded-lg hover:bg-ivory-200 text-gray-500"
                         title="Export JSON Backup"
                       >
@@ -396,7 +409,7 @@ export const AdminCertificates: React.FC = () => {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDeleteConfig(cfg.id, cfg.eventTitle)}
+                        onClick={() => handleDeleteConfig(cfg)}
                         className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500"
                         title="Delete configuration"
                       >

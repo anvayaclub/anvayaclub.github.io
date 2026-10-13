@@ -1,31 +1,22 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 
-const uploadDir = path.resolve(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-  },
-});
+// Memory storage keeps file buffers in memory for direct Cloudinary streaming or safe saving,
+// eliminating EROFS (read-only filesystem) errors on Vercel and serverless containers.
+const storage = multer.memoryStorage();
 
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.mp4', '.webm'];
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif', '.mp4', '.webm'];
   const ext = path.extname(file.originalname).toLowerCase();
 
-  if (allowedExtensions.includes(ext)) {
+  if (
+    allowedExtensions.includes(ext) ||
+    file.mimetype.startsWith('image/') ||
+    file.mimetype.startsWith('video/')
+  ) {
     cb(null, true);
   } else {
-    cb(new Error(`Unsupported file type: ${ext}. Allowed formats: jpg, png, webp, svg, mp4, webm.`));
+    cb(new Error(`Unsupported file type: ${ext || file.mimetype}. Allowed formats: jpg, png, webp, svg, gif, mp4, webm.`));
   }
 };
 

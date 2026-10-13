@@ -22,6 +22,9 @@ const GalleryAlbumSchema = new Schema<IGalleryAlbumDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+GalleryAlbumSchema.set('toJSON', { virtuals: true });
+GalleryAlbumSchema.set('toObject', { virtuals: true });
+
 export const GalleryAlbum = mongoose.model<IGalleryAlbumDocument>('GalleryAlbum', GalleryAlbumSchema);
 
 export interface IGalleryMediaDocument extends Document {
@@ -51,5 +54,8 @@ const GalleryMediaSchema = new Schema<IGalleryMediaDocument>({
   isPublished: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
+
+GalleryMediaSchema.set('toJSON', { virtuals: true });
+GalleryMediaSchema.set('toObject', { virtuals: true });
 
 export const GalleryMedia = mongoose.model<IGalleryMediaDocument>('GalleryMedia', GalleryMediaSchema);

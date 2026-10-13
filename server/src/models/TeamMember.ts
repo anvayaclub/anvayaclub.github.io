@@ -48,4 +48,7 @@ const TeamMemberSchema = new Schema<ITeamMemberDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+TeamMemberSchema.set('toJSON', { virtuals: true });
+TeamMemberSchema.set('toObject', { virtuals: true });
+
 export const TeamMember = mongoose.model<ITeamMemberDocument>('TeamMember', TeamMemberSchema);

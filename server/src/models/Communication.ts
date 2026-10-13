@@ -26,6 +26,9 @@ const AnnouncementSchema = new Schema<IAnnouncementDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+AnnouncementSchema.set('toJSON', { virtuals: true });
+AnnouncementSchema.set('toObject', { virtuals: true });
+
 export const Announcement = mongoose.model<IAnnouncementDocument>('Announcement', AnnouncementSchema);
 
 export interface INewsletterSubscriberDocument extends Document {
@@ -39,6 +42,9 @@ const NewsletterSubscriberSchema = new Schema<INewsletterSubscriberDocument>({
   subscribedAt: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true },
 });
+
+NewsletterSubscriberSchema.set('toJSON', { virtuals: true });
+NewsletterSubscriberSchema.set('toObject', { virtuals: true });
 
 export const NewsletterSubscriber = mongoose.model<INewsletterSubscriberDocument>('NewsletterSubscriber', NewsletterSubscriberSchema);
 
@@ -59,6 +65,9 @@ const ContactSubmissionSchema = new Schema<IContactSubmissionDocument>({
   status: { type: String, enum: ['unread', 'read', 'replied'], default: 'unread' },
   createdAt: { type: Date, default: Date.now },
 });
+
+ContactSubmissionSchema.set('toJSON', { virtuals: true });
+ContactSubmissionSchema.set('toObject', { virtuals: true });
 
 export const ContactSubmission = mongoose.model<IContactSubmissionDocument>('ContactSubmission', ContactSubmissionSchema);
 
@@ -99,5 +108,8 @@ const SiteSettingsSchema = new Schema<ISiteSettingsDocument>({
   mapUrl: { type: String, default: 'https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur' },
   updatedAt: { type: Date, default: Date.now },
 });
+
+SiteSettingsSchema.set('toJSON', { virtuals: true });
+SiteSettingsSchema.set('toObject', { virtuals: true });
 
 export const SiteSettings = mongoose.model<ISiteSettingsDocument>('SiteSettings', SiteSettingsSchema);

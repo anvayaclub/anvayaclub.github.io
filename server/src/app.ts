@@ -21,6 +21,8 @@ app.use(
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   })
 );
 
@@ -51,4 +53,14 @@ app.get('/api/health', (_req, res) => {
 // Global 404 handler for API
 app.use('/api/*', (_req, res) => {
   res.status(404).json({ success: false, message: 'API endpoint not found.' });
+});
+
+// Error handling middleware (ensures all errors return JSON instead of HTML error pages)
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled server error:', err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || 'An unexpected internal server error occurred.',
+  });
 });

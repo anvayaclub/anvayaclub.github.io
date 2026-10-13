@@ -189,7 +189,7 @@ export const api = {
     getAdminConfigs: () => request<{ success: boolean; data: any[] }>('/certificates/admin/configs'),
     createConfig: (body: any) => request<{ success: boolean; data: any; message: string }>('/certificates/admin/configs', { method: 'POST', body: JSON.stringify(body) }),
     updateConfig: (id: string, body: any) => request<{ success: boolean; data: any; message: string }>(`/certificates/admin/configs/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    deleteConfig: (id: string) => request<{ success: boolean; message: string }>(`/certificates/admin/configs/${id}`, { method: 'DELETE' }),
+    deleteConfig: (id: string, force = false) => request<{ success: boolean; message: string }>(`/certificates/admin/configs/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
     getParticipants: (configId: string, search?: string) => {
       const q = search ? `?search=${encodeURIComponent(search)}` : '';
       return request<{ success: boolean; data: any[] }>(`/certificates/admin/configs/${configId}/participants${q}`);
@@ -324,22 +324,70 @@ export const api = {
       throw new Error('Media upload requires a deployed backend API. Please configure VITE_API_BASE_URL.');
     }
 
+    const token = getToken();
+
+    // 1. Direct Cloudinary upload for large files (> 4MB) to bypass Vercel serverless request limits
+    if (file.size > 4 * 1024 * 1024) {
+      try {
+        const sigRes = await fetch(`${API_BASE}/upload/signature?folder=anvaya`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (sigRes.ok) {
+          const sigData = await sigRes.json();
+          if (sigData.success && sigData.signature) {
+            const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(file.name);
+            const endpoint = `https://api.cloudinary.com/v1_1/${sigData.cloudName}/${isVideo ? 'video' : 'auto'}/upload`;
+            const cloudFormData = new FormData();
+            cloudFormData.append('file', file);
+            cloudFormData.append('api_key', sigData.apiKey);
+            cloudFormData.append('timestamp', String(sigData.timestamp));
+            cloudFormData.append('signature', sigData.signature);
+            cloudFormData.append('folder', sigData.folder || 'anvaya');
+
+            const cRes = await fetch(endpoint, {
+              method: 'POST',
+              body: cloudFormData,
+            });
+            const cJson = await cRes.json();
+            if (cRes.ok && (cJson.secure_url || cJson.url)) {
+              return {
+                success: true,
+                fileUrl: cJson.secure_url || cJson.url,
+                filename: cJson.original_filename || file.name,
+              };
+            }
+          }
+        }
+      } catch (directErr) {
+        console.warn('Direct upload bypass attempt was skipped or failed; proceeding with standard upload:', directErr);
+      }
+    }
+
+    // 2. Standard upload via backend endpoint
     const formData = new FormData();
     formData.append('file', file);
 
-    const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    } catch (netErr: any) {
+      throw new Error(`Media upload network error: ${netErr.message || 'Cannot reach API server.'}`);
+    }
 
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      throw new Error(`Media upload service unavailable (HTTP ${res.status}). Ensure backend is reachable.`);
+      const errorText = await res.text();
+      if (res.status === 413) {
+        throw new Error('File exceeds serverless payload size limit (4.5MB). Please choose a smaller file or configure Cloudinary.');
+      }
+      throw new Error(`Media upload failed (HTTP ${res.status}): ${errorText.slice(0, 150) || 'Ensure backend is reachable.'}`);
     }
 
     const data = await res.json();

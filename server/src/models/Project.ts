@@ -44,6 +44,9 @@ const ProjectSchema = new Schema<IProjectDocument>({
   updatedAt: { type: Date, default: Date.now },
 });
 
+ProjectSchema.set('toJSON', { virtuals: true });
+ProjectSchema.set('toObject', { virtuals: true });
+
 export const Project = mongoose.model<IProjectDocument>('Project', ProjectSchema);
 
 export interface IProjectIdeaDocument extends Document {
@@ -73,5 +76,8 @@ const ProjectIdeaSchema = new Schema<IProjectIdeaDocument>({
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
 });
+
+ProjectIdeaSchema.set('toJSON', { virtuals: true });
+ProjectIdeaSchema.set('toObject', { virtuals: true });
 
 export const ProjectIdea = mongoose.model<IProjectIdeaDocument>('ProjectIdea', ProjectIdeaSchema);

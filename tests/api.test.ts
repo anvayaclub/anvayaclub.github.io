@@ -498,5 +498,251 @@ describe('Anvaya Cultural Committee API Test Suite', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
+
+  // ==========================================
+  // MASTER BUG FIX VERIFICATION TESTS
+  // ==========================================
+
+  // BUG 1: Contact Inquiry "Mark as Read"
+  describe('Bug 1: Contact Inquiry Management & Status Updates', () => {
+    let createdInquiryId = '';
+
+    it('POST /api/contact should allow users to submit contact inquiries', async () => {
+      const res = await request(app)
+        .post('/api/contact')
+        .send({
+          name: 'Pooja Sharma',
+          email: 'pooja.sharma@kit.edu',
+          subject: 'Dance Audition Inquiry',
+          message: 'Can 1st year students register for the folk dance competition?',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.id || res.body.data._id).toBeDefined();
+      createdInquiryId = res.body.data.id || res.body.data._id;
+    });
+
+    it('GET /api/contact/admin should return inquiries with a valid virtual id property', async () => {
+      const res = await request(app)
+        .get('/api/contact/admin')
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      const target = res.body.data.find((item: any) => (item.id === createdInquiryId || item._id === createdInquiryId));
+      expect(target).toBeDefined();
+      expect(target.id).toBeDefined();
+      expect(target.id).not.toBe('undefined');
+    });
+
+    it('PATCH /api/contact/admin/:id should successfully mark an inquiry as read', async () => {
+      const res = await request(app)
+        .patch(`/api/contact/admin/${createdInquiryId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({ status: 'read' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.status).toBe('read');
+    });
+
+    it('PATCH /api/contact/admin/:id should reject string "undefined" as ID with HTTP 400', async () => {
+      const res = await request(app)
+        .patch('/api/contact/admin/undefined')
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({ status: 'read' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('Invalid or missing contact inquiry identifier');
+    });
+
+    it('PATCH /api/contact/admin/:id should reject invalid status values with HTTP 400', async () => {
+      const res = await request(app)
+        .patch(`/api/contact/admin/${createdInquiryId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({ status: 'invalid_status' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('Invalid status');
+    });
+  });
+
+  // BUG 2: Event Registration Flow
+  describe('Bug 2: Event Registration & Duplicate Prevention', () => {
+    const regUsn = '1KI23IS099';
+
+    it('POST /api/events/:id/register should allow registration using event ID', async () => {
+      const res = await request(app)
+        .post('/api/events/ev_1/register')
+        .send({
+          fullName: 'Suresh Kumar',
+          usn: regUsn,
+          email: 'suresh@kit-tiptur.ac.in',
+          phone: '9876543210',
+          branch: 'ISE',
+          semester: '6th Semester',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.usn).toBe(regUsn);
+      expect(res.body.data.id).toBeDefined();
+    });
+
+    it('POST /api/events/:id/register should reject duplicate registration for the same USN', async () => {
+      const res = await request(app)
+        .post('/api/events/ev_1/register')
+        .send({
+          fullName: 'Suresh Kumar',
+          usn: regUsn,
+          email: 'suresh@kit-tiptur.ac.in',
+          phone: '9876543210',
+          branch: 'ISE',
+          semester: '6th Semester',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('already registered');
+    });
+
+    it('POST /api/events/:id/register should allow registration using event slug', async () => {
+      const res = await request(app)
+        .post('/api/events/swaralaya-vocal-competition-2026/register')
+        .send({
+          fullName: 'Ananya Rao',
+          usn: '1KI23IS088',
+          email: 'ananya@kit-tiptur.ac.in',
+          phone: '9845012345',
+          branch: 'ISE',
+          semester: '4th Semester',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.usn).toBe('1KI23IS088');
+    });
+
+    it('POST /api/events/:id/register should reject registration when required fields are missing', async () => {
+      const res = await request(app)
+        .post('/api/events/ev_1/register')
+        .send({
+          fullName: 'Test Student',
+          usn: '',
+          email: 'test@kit.edu',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('POST /api/events/:id/register should reject invalid email format', async () => {
+      const res = await request(app)
+        .post('/api/events/ev_1/register')
+        .send({
+          fullName: 'Test Student',
+          usn: '1KI23IS077',
+          email: 'invalid-email',
+          phone: '9988776655',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // BUG 3: Certificate Configuration Deletion Flow
+  describe('Bug 3: Certificate Configuration Deletion & Safety Safeguards', () => {
+    let testConfigId = '';
+
+    it('POST /api/certificates/admin/configs should create a test certificate configuration', async () => {
+      const res = await request(app)
+        .post('/api/certificates/admin/configs')
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({
+          eventId: 'ev_1',
+          eventTitle: 'Rhythms of Tiptur',
+          eventDate: '5 November 2026',
+          certificateTitle: 'Certificate of Excellence',
+          bodyTemplate: 'has demonstrated outstanding choreography in Rhythms of Tiptur.',
+          isEnabled: true,
+          signatories: [{ name: 'HOD ISE', role: 'Head of Department' }],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      testConfigId = res.body.data.id || res.body.data._id;
+      expect(testConfigId).toBeDefined();
+    });
+
+    it('DELETE /api/certificates/admin/configs/:id should directly delete config with zero participants', async () => {
+      const res = await request(app)
+        .delete(`/api/certificates/admin/configs/${testConfigId}`)
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it('DELETE /api/certificates/admin/configs/:id should return 409 Conflict when participants exist without force flag', async () => {
+      // cert_1 has 4 participants
+      const res = await request(app)
+        .delete('/api/certificates/admin/configs/cert_1')
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.success).toBe(false);
+      expect(res.body.requiresConfirmation).toBe(true);
+      expect(res.body.participantsCount).toBeGreaterThan(0);
+    });
+
+    it('DELETE /api/certificates/admin/configs/:id should reject string "undefined" as ID', async () => {
+      const res = await request(app)
+        .delete('/api/certificates/admin/configs/undefined')
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // BUG 4: Media Uploads & Streaming
+  describe('Bug 4: Media Uploads, Signatures, and Memory Streaming', () => {
+    it('GET /api/upload/signature should handle signature request safely', async () => {
+      const res = await request(app)
+        .get('/api/upload/signature')
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect([200, 503]).toContain(res.status);
+      expect(typeof res.body.success).toBe('boolean');
+    });
+
+    it('POST /api/upload should reject upload when no file is attached', async () => {
+      const res = await request(app)
+        .post('/api/upload')
+        .set('Authorization', `Bearer ${technicalToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toBe('No file uploaded.');
+    });
+
+    it('POST /api/upload should accept an image file buffer and return fileUrl', async () => {
+      const testBuffer = Buffer.from('fake-png-image-binary-stream-for-anvaya');
+      const res = await request(app)
+        .post('/api/upload')
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .attach('file', testBuffer, 'poster.png');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.fileUrl).toBeDefined();
+    });
+  });
 });
 

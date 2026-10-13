@@ -80,7 +80,13 @@ export const EventDetail: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const res = await api.events.register(event.id, {
+      const eventIdentifier = (event as any)._id || event.id || event.slug || slug;
+      if (!eventIdentifier) {
+        error('Invalid event identifier.');
+        return;
+      }
+
+      const res = await api.events.register(eventIdentifier, {
         fullName,
         usn: usn.trim().toUpperCase(),
         email,

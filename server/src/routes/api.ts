@@ -85,8 +85,9 @@ import {
   updateSettings,
 } from '../controllers/communicationController.js';
 import { searchGlobal } from '../controllers/searchController.js';
-import { authenticateToken, requireTechnical, requireMediaPoster } from '../middleware/auth.js';
+import { authenticateToken, optionalAuth, requireTechnical, requireMediaPoster } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
+import { uploadMediaBuffer, generateCloudinarySignature, isCloudinaryConfigured } from '../services/mediaService.js';
 
 const router = express.Router();
 
@@ -127,7 +128,7 @@ router.get('/events/:slug', getEventBySlug);
 router.post('/events', authenticateToken, requireTechnical, createEvent);
 router.put('/events/:id', authenticateToken, requireTechnical, updateEvent);
 router.delete('/events/:id', authenticateToken, requireTechnical, deleteEvent);
-router.post('/events/:id/register', registerForEvent);
+router.post('/events/:id/register', optionalAuth, registerForEvent);
 router.get('/events/:id/registrations', authenticateToken, requireTechnical, getEventRegistrations);
 router.get('/events/:id/registrations/export', authenticateToken, requireTechnical, exportEventRegistrationsCsv);
 
@@ -196,19 +197,57 @@ router.put('/settings', authenticateToken, requireTechnical, updateSettings);
 router.get('/search', searchGlobal);
 
 // 11. Secure Media Upload
-router.post('/upload', upload.single('file'), (req: Request, res: Response) => {
+router.get('/upload/signature', optionalAuth, (req: Request, res: Response) => {
+  try {
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({
+        success: false,
+        message: 'Direct Cloudinary upload is not configured on the server. CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET must be set.',
+      });
+      return;
+    }
+    const folder = (req.query.folder as string) || 'anvaya';
+    const signatureData = generateCloudinarySignature(folder);
+    res.json({
+      success: true,
+      ...signatureData,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to generate upload signature.' });
+  }
+});
+
+router.post('/upload', optionalAuth, upload.single('file'), async (req: Request, res: Response) => {
   if (!req.file) {
     res.status(400).json({ success: false, message: 'No file uploaded.' });
     return;
   }
-  const fileUrl = `/uploads/${req.file.filename}`;
-  res.json({
-    success: true,
-    fileUrl,
-    filename: req.file.filename,
-    size: req.file.size,
-    message: 'File uploaded successfully.',
-  });
+
+  try {
+    const folder = (req.body.folder as string) || 'anvaya';
+    const result = await uploadMediaBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      folder
+    );
+
+    res.json({
+      success: true,
+      fileUrl: result.fileUrl,
+      filename: result.filename,
+      size: result.bytes,
+      publicId: result.publicId,
+      resourceType: result.resourceType,
+      message: 'File uploaded successfully.',
+    });
+  } catch (error: any) {
+    console.error('Upload processing error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Media upload service failed. Please check server logs and configuration.',
+    });
+  }
 });
 
 export default router;

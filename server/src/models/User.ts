@@ -32,6 +32,9 @@ const UserSchema = new Schema<IUserDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+UserSchema.set('toJSON', { virtuals: true });
+UserSchema.set('toObject', { virtuals: true });
+
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
 

@@ -30,15 +30,23 @@ export const AdminInquiries: React.FC = () => {
     fetchData();
   }, []);
 
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   const handleUpdateStatus = async (id: string, status: string) => {
+    if (!id) return;
+    setUpdatingId(id);
     try {
       const res = await api.communication.updateContactStatus(id, status);
       if (res.success) {
         success(`Inquiry marked as ${status}.`);
-        fetchData();
+        setInquiries(prev =>
+          prev.map(inq => (((inq as any)._id === id || inq.id === id) ? { ...inq, status: status as any } : inq))
+        );
       }
     } catch (err: any) {
-      error(err.message || 'Failed to update status.');
+      error(err.message || 'Failed to update contact inquiry status.');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -64,9 +72,12 @@ export const AdminInquiries: React.FC = () => {
           <div className="py-12 text-center text-xs text-gray-400">Loading messages...</div>
         ) : inquiries.length > 0 ? (
           <div className="space-y-3">
-            {inquiries.map(inq => (
+            {inquiries.map(inq => {
+              const inqId = (inq as any)._id || inq.id;
+              const isUpdating = updatingId === inqId;
+              return (
               <div
-                key={inq.id}
+                key={inqId}
                 className="p-5 rounded-2xl bg-white dark:bg-plum-900 border border-ivory-200 dark:border-plum-800 shadow-sm space-y-3 text-xs"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ivory-200 dark:border-plum-800 pb-2.5">
@@ -96,22 +107,24 @@ export const AdminInquiries: React.FC = () => {
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <a
                     href={`mailto:${inq.email}?subject=Re: ${encodeURIComponent(inq.subject)}`}
-                    onClick={() => handleUpdateStatus(inq.id, 'replied')}
+                    onClick={() => handleUpdateStatus(inqId, 'replied')}
                     className="px-3 py-1 rounded-lg bg-gold-600 text-white font-semibold text-xs hover:bg-gold-500"
                   >
                     Reply via Email
                   </a>
                   {inq.status !== 'read' && inq.status !== 'replied' && (
                     <button
-                      onClick={() => handleUpdateStatus(inq.id, 'read')}
-                      className="px-3 py-1 rounded-lg border border-ivory-300 dark:border-plum-700 text-gray-600 dark:text-gray-300"
+                      disabled={isUpdating}
+                      onClick={() => handleUpdateStatus(inqId, 'read')}
+                      className="px-3 py-1 rounded-lg border border-ivory-300 dark:border-plum-700 text-gray-600 dark:text-gray-300 hover:bg-ivory-200 dark:hover:bg-plum-800 transition-colors disabled:opacity-50"
                     >
-                      Mark as Read
+                      {isUpdating ? 'Updating...' : 'Mark as Read'}
                     </button>
                   )}
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         ) : (
           <div className="p-8 text-center text-xs text-gray-400 rounded-2xl border border-ivory-200 dark:border-plum-800">

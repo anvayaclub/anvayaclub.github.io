@@ -32,4 +32,7 @@ const MembershipApplicationSchema = new Schema<IMembershipApplicationDocument>({
   submittedAt: { type: Date, default: Date.now },
 });
 
+MembershipApplicationSchema.set('toJSON', { virtuals: true });
+MembershipApplicationSchema.set('toObject', { virtuals: true });
+
 export const MembershipApplication = mongoose.model<IMembershipApplicationDocument>('MembershipApplication', MembershipApplicationSchema);

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { Event, EventRegistration } from '../models/Event.js';
 import { CertificateConfig } from '../models/Certificate.js';
@@ -83,14 +84,14 @@ export const getEventBySlug = async (req: Request, res: Response): Promise<void>
         res.status(404).json({ success: false, message: 'Event not found.' });
         return;
       }
-      res.json({ success: true, data: event });
+      res.json({ success: true, data: { ...event.toObject({ virtuals: true }), id: event._id.toString() } });
     } else {
       const event = memoryStore.events.find(e => e.slug === slug);
       if (!event) {
         res.status(404).json({ success: false, message: 'Event not found.' });
         return;
       }
-      res.json({ success: true, data: event });
+      res.json({ success: true, data: { ...event, id: event._id || event.id } });
     }
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to retrieve event details.' });
@@ -368,15 +369,33 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
     const { id } = req.params;
     const { fullName, usn, email, phone, branch, semester, academicYear } = req.body;
 
-    if (!fullName || !usn || !email || !phone) {
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid or missing event identifier.' });
+      return;
+    }
+
+    if (!fullName || !fullName.trim() || !usn || !usn.trim() || !email || !email.trim() || !phone || !phone.trim()) {
       res.status(400).json({ success: false, message: 'Full Name, USN, Email, and Phone number are required for registration.' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
       return;
     }
 
     const normalizedUsn = usn.trim().toUpperCase();
 
     if (isDbConnected()) {
-      const event = await Event.findById(id);
+      let event: any = null;
+      if (mongoose.isValidObjectId(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) {
+        event = await Event.findOne({ slug: id });
+      }
+
       if (!event) {
         res.status(404).json({ success: false, message: 'Event not found.' });
         return;
@@ -413,10 +432,15 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         return;
       }
 
+      let userObjectId: any = undefined;
+      if (req.user?.id && mongoose.isValidObjectId(req.user.id)) {
+        userObjectId = req.user.id;
+      }
+
       const registration = await EventRegistration.create({
         eventId: event._id,
         eventTitle: event.title,
-        userId: req.user?.id,
+        userId: userObjectId,
         fullName: fullName.trim(),
         usn: normalizedUsn,
         email: email.toLowerCase().trim(),
@@ -426,16 +450,20 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         academicYear: academicYear || '3rd Year',
       });
 
-      event.regCount += 1;
-      await event.save();
+      await Event.findByIdAndUpdate(event._id, { $inc: { regCount: 1 } });
 
       res.status(201).json({
         success: true,
         message: 'Registration confirmed! Your seat has been successfully reserved.',
-        data: registration,
+        data: {
+          ...registration.toObject({ virtuals: true }),
+          id: registration._id.toString(),
+        },
       });
     } else {
-      const event = memoryStore.events.find(e => e._id === id || e.id === id);
+      const event = memoryStore.events.find(
+        e => (e._id || e.id) === id || e.slug === id
+      );
       if (!event) {
         res.status(404).json({ success: false, message: 'Event not found.' });
         return;
@@ -461,13 +489,13 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         return;
       }
 
-      if (event.regCapacity && event.regCapacity > 0 && event.regCount >= event.regCapacity) {
+      if (event.regCapacity && event.regCapacity > 0 && (event.regCount || 0) >= event.regCapacity) {
         res.status(400).json({ success: false, message: 'Registration capacity has been reached for this event.' });
         return;
       }
 
       const existing = memoryStore.eventRegistrations.find(
-        r => (r.eventId === id || r.eventId === event._id) && r.usn === normalizedUsn
+        r => (r.eventId === id || r.eventId === event._id || r.eventId === event.id) && r.usn === normalizedUsn
       );
       if (existing) {
         res.status(400).json({ success: false, message: `USN ${normalizedUsn} is already registered for this event.` });
@@ -478,7 +506,7 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
       const newReg = {
         _id: regId,
         id: regId,
-        eventId: event._id || id,
+        eventId: event._id || event.id || id,
         eventTitle: event.title,
         userId: req.user?.id,
         fullName: fullName.trim(),
@@ -501,7 +529,12 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
       });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to submit registration.' });
+    console.error('Error submitting event registration:', error);
+    if (error.code === 11000) {
+      res.status(400).json({ success: false, message: 'You have already registered for this event with this USN.' });
+      return;
+    }
+    res.status(500).json({ success: false, message: error.message || 'Failed to submit registration.' });
   }
 };
 
@@ -510,13 +543,23 @@ export const getEventRegistrations = async (req: Request, res: Response): Promis
     const { id } = req.params;
 
     if (isDbConnected()) {
-      const registrations = await EventRegistration.find({ eventId: id }).sort({ registeredAt: -1 });
-      res.json({ success: true, data: registrations });
+      let eventId = id;
+      if (!mongoose.isValidObjectId(id)) {
+        const ev = await Event.findOne({ slug: id });
+        if (ev) eventId = ev._id.toString();
+      }
+      const registrations = await EventRegistration.find({ eventId }).sort({ registeredAt: -1 });
+      const data = registrations.map(r => ({
+        ...r.toObject({ virtuals: true }),
+        id: r._id.toString(),
+      }));
+      res.json({ success: true, data });
     } else {
       const registrations = memoryStore.eventRegistrations.filter(r => r.eventId === id);
       res.json({ success: true, data: registrations });
     }
   } catch (error: any) {
+    console.error('Error retrieving event registrations:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve event registrations.' });
   }
 };

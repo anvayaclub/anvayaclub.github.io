@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { Announcement, NewsletterSubscriber, ContactSubmission, SiteSettings } from '../models/Communication.js';
 import { isDbConnected } from '../config/db.js';
@@ -227,11 +228,20 @@ export const getContactSubmissions = async (_req: Request, res: Response): Promi
   try {
     if (isDbConnected()) {
       const submissions = await ContactSubmission.find().sort({ createdAt: -1 });
-      res.json({ success: true, data: submissions });
+      const data = submissions.map(s => ({
+        ...s.toObject({ virtuals: true }),
+        id: s._id.toString(),
+      }));
+      res.json({ success: true, data });
     } else {
-      res.json({ success: true, data: memoryStore.contactSubmissions });
+      const data = memoryStore.contactSubmissions.map(s => ({
+        ...s,
+        id: s._id || s.id,
+      }));
+      res.json({ success: true, data });
     }
   } catch (error: any) {
+    console.error('Failed to retrieve contact inquiries:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve contact inquiries.' });
   }
 };
@@ -241,16 +251,42 @@ export const updateContactStatus = async (req: Request, res: Response): Promise<
     const { id } = req.params;
     const { status } = req.body;
 
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid or missing contact inquiry identifier.' });
+      return;
+    }
+
+    if (!status || !['unread', 'read', 'replied'].includes(status)) {
+      res.status(400).json({ success: false, message: 'Invalid status. Allowed values: unread, read, replied.' });
+      return;
+    }
+
     if (isDbConnected()) {
-      const sub = await ContactSubmission.findByIdAndUpdate(id, { status }, { new: true });
-      res.json({ success: true, data: sub });
+      let sub = null;
+      if (mongoose.isValidObjectId(id)) {
+        sub = await ContactSubmission.findByIdAndUpdate(id, { status }, { new: true });
+      }
+      if (!sub) {
+        sub = await ContactSubmission.findOneAndUpdate({ _id: id }, { status }, { new: true });
+      }
+
+      if (!sub) {
+        res.status(404).json({ success: false, message: 'Contact inquiry not found.' });
+        return;
+      }
+      res.json({ success: true, data: { ...sub.toObject({ virtuals: true }), id: sub._id.toString() }, message: `Inquiry marked as ${status}.` });
     } else {
       const sub = memoryStore.contactSubmissions.find(c => c._id === id || c.id === id);
-      if (sub) sub.status = status;
-      res.json({ success: true, data: sub });
+      if (!sub) {
+        res.status(404).json({ success: false, message: 'Contact inquiry not found.' });
+        return;
+      }
+      sub.status = status as any;
+      res.json({ success: true, data: { ...sub, id: sub._id || sub.id }, message: `Inquiry marked as ${status}.` });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to update contact inquiry status.' });
+    console.error('Failed to update contact inquiry status:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update contact inquiry status.' });
   }
 };
 

@@ -76,6 +76,9 @@ const EventSchema = new Schema<IEventDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+EventSchema.set('toJSON', { virtuals: true });
+EventSchema.set('toObject', { virtuals: true });
+
 export const Event = mongoose.model<IEventDocument>('Event', EventSchema);
 
 export interface IEventRegistrationDocument extends Document {
@@ -107,5 +110,8 @@ const EventRegistrationSchema = new Schema<IEventRegistrationDocument>({
 });
 
 EventRegistrationSchema.index({ eventId: 1, usn: 1 }, { unique: true });
+
+EventRegistrationSchema.set('toJSON', { virtuals: true });
+EventRegistrationSchema.set('toObject', { virtuals: true });
 
 export const EventRegistration = mongoose.model<IEventRegistrationDocument>('EventRegistration', EventRegistrationSchema);

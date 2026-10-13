@@ -147,5 +147,44 @@ export const requireMediaPoster = (req: AuthRequest, res: Response, next: NextFu
   res.status(403).json({ success: false, message: 'Access denied. Media Poster or Technical privileges required.' });
 };
 
+// Optional Authentication Middleware: populates req.user if a valid token is passed, but does not block guests
+export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextFunction): Promise<void> => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET || 'anvaya_kit_secure_dev_secret_key_2026';
+
+  try {
+    const decoded = jwt.verify(token, secret) as any;
+    const userId = decoded.id || decoded._id;
+
+    let currentUser: any = null;
+    if (isDbConnected()) {
+      currentUser = await User.findById(userId);
+    } else {
+      currentUser = memoryStore.users.find(u => (u._id || u.id) === userId);
+    }
+
+    if (currentUser && currentUser.status !== 'deactivated' && currentUser.status !== 'inactive') {
+      req.user = {
+        id: userId,
+        email: currentUser.email || decoded.email,
+        usn: currentUser.usn || decoded.usn,
+        role: currentUser.role || decoded.role || 'student',
+        name: currentUser.name || decoded.name,
+      };
+    }
+  } catch {
+    // Ignore invalid token in optional authentication
+  }
+
+  next();
+};
+
 // Legacy backward-compatibility alias
 export const requireAdmin = requireTechnical;

@@ -41,6 +41,9 @@ const CertificateConfigSchema = new Schema<ICertificateConfigDocument>({
   createdAt: { type: Date, default: Date.now },
 });
 
+CertificateConfigSchema.set('toJSON', { virtuals: true });
+CertificateConfigSchema.set('toObject', { virtuals: true });
+
 export const CertificateConfig = mongoose.model<ICertificateConfigDocument>('CertificateConfig', CertificateConfigSchema);
 
 export interface ICertificateParticipantDocument extends Document {
@@ -64,5 +67,8 @@ const CertificateParticipantSchema = new Schema<ICertificateParticipantDocument>
 });
 
 CertificateParticipantSchema.index({ configId: 1, usn: 1 }, { unique: true });
+
+CertificateParticipantSchema.set('toJSON', { virtuals: true });
+CertificateParticipantSchema.set('toObject', { virtuals: true });
 
 export const CertificateParticipant = mongoose.model<ICertificateParticipantDocument>('CertificateParticipant', CertificateParticipantSchema);

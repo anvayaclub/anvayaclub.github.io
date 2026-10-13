@@ -30,4 +30,7 @@ AuditLogSchema.index({ createdAt: -1 });
 AuditLogSchema.index({ targetUserUsn: 1 });
 AuditLogSchema.index({ action: 1 });
 
+AuditLogSchema.set('toJSON', { virtuals: true });
+AuditLogSchema.set('toObject', { virtuals: true });
+
 export const AuditLog = mongoose.model<IAuditLogDocument>('AuditLog', AuditLogSchema);

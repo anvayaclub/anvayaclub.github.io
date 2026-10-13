@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { CertificateConfig, CertificateParticipant } from '../models/Certificate.js';
 import { isDbConnected } from '../config/db.js';
@@ -10,11 +11,16 @@ export const getActiveConfigs = async (_req: Request, res: Response): Promise<vo
       const configs = await CertificateConfig.find({ isEnabled: true, isPublished: true })
         .select('eventTitle eventDate certificateTitle isEnabled')
         .sort({ createdAt: -1 });
-      res.json({ success: true, data: configs });
+      const data = configs.map(c => ({
+        ...c.toObject({ virtuals: true }),
+        id: c._id.toString(),
+      }));
+      res.json({ success: true, data });
     } else {
       const configs = memoryStore.certificateConfigs
         .filter(c => c.isEnabled && c.isPublished)
         .map(c => ({
+          ...c,
           _id: c._id || c.id,
           id: c.id || c._id,
           eventTitle: c.eventTitle,
@@ -164,18 +170,27 @@ export const getAdminConfigs = async (_req: Request, res: Response): Promise<voi
       const configsWithCounts = await Promise.all(
         configs.map(async (c: any) => {
           const count = await CertificateParticipant.countDocuments({ configId: c._id });
-          return { ...c.toObject(), participantsCount: count };
+          return {
+            ...c.toObject({ virtuals: true }),
+            id: c._id.toString(),
+            participantsCount: count,
+          };
         })
       );
       res.json({ success: true, data: configsWithCounts });
     } else {
       const configsWithCounts = memoryStore.certificateConfigs.map(c => {
         const count = memoryStore.certificateParticipants.filter(p => p.configId === c._id || p.configId === c.id).length;
-        return { ...c, participantsCount: count };
+        return {
+          ...c,
+          id: c._id || c.id,
+          participantsCount: count,
+        };
       });
       res.json({ success: true, data: configsWithCounts });
     }
   } catch (error: any) {
+    console.error('Failed to retrieve certificate configurations:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve certificate configurations.' });
   }
 };
@@ -256,23 +271,72 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
 export const deleteConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const force = req.query.force === 'true' || req.body?.force === true;
+
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid or missing certificate configuration identifier.' });
+      return;
+    }
 
     if (isDbConnected()) {
-      await CertificateConfig.findByIdAndDelete(id);
-      await CertificateParticipant.deleteMany({ configId: id });
-      res.json({ success: true, message: 'Configuration and associated participant records deleted.' });
-    } else {
-      const index = memoryStore.certificateConfigs.findIndex(c => c._id === id || c.id === id);
-      if (index === -1) {
-        res.status(404).json({ success: false, message: 'Certificate configuration not found.' });
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ success: false, message: 'Invalid certificate configuration identifier format.' });
         return;
       }
+
+      const config = await CertificateConfig.findById(id);
+      if (!config) {
+        res.status(404).json({ success: false, message: 'Certificate configuration not found or already deleted.' });
+        return;
+      }
+
+      const participantCount = await CertificateParticipant.countDocuments({ configId: id });
+      if (participantCount > 0 && !force) {
+        res.status(409).json({
+          success: false,
+          hasParticipants: true,
+          requiresConfirmation: true,
+          participantCount,
+          participantsCount: participantCount,
+          message: `Cannot delete configuration: ${participantCount} issued participant record(s) exist. Confirm deletion with force parameter to proceed with deleting all associated records.`,
+        });
+        return;
+      }
+
+      await CertificateConfig.findByIdAndDelete(id);
+      if (participantCount > 0) {
+        await CertificateParticipant.deleteMany({ configId: id });
+      }
+      res.json({ success: true, message: 'Configuration and associated participant records deleted.' });
+    } else {
+      const index = memoryStore.certificateConfigs.findIndex(c => (c._id || c.id) === id);
+      if (index === -1) {
+        res.status(404).json({ success: false, message: 'Certificate configuration not found or already deleted.' });
+        return;
+      }
+
+      const targetId = memoryStore.certificateConfigs[index]._id || memoryStore.certificateConfigs[index].id;
+      const participantCount = memoryStore.certificateParticipants.filter(p => p.configId === targetId || p.configId === id).length;
+
+      if (participantCount > 0 && !force) {
+        res.status(409).json({
+          success: false,
+          hasParticipants: true,
+          requiresConfirmation: true,
+          participantCount,
+          participantsCount: participantCount,
+          message: `Cannot delete configuration: ${participantCount} issued participant record(s) exist. Confirm deletion with force parameter to proceed with deleting all associated records.`,
+        });
+        return;
+      }
+
       memoryStore.certificateConfigs.splice(index, 1);
-      memoryStore.certificateParticipants = memoryStore.certificateParticipants.filter(p => p.configId !== id);
+      memoryStore.certificateParticipants = memoryStore.certificateParticipants.filter(p => p.configId !== targetId && p.configId !== id);
       res.json({ success: true, message: 'Configuration and associated participant records deleted.' });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to delete certificate configuration.' });
+    console.error('Error in deleteConfig:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete certificate configuration.' });
   }
 };
 
