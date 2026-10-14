@@ -119,6 +119,22 @@ export interface EventItem {
     winners?: EventWinner[];
   };
   relatedAlbumId?: string;
+  remindersSent?: boolean;
+  remindersSentAt?: string;
+  poll?: {
+    isOpen: boolean;
+    title: string;
+    nominees: Array<{
+      id: string;
+      name: string;
+      usn?: string;
+      title: string;
+      votesCount: number;
+    }>;
+    totalVotes?: number;
+    hasVoted?: boolean;
+    votedNomineeId?: string;
+  };
   createdAt?: string;
 }
 
@@ -135,6 +151,10 @@ export interface EventRegistration {
   branch: string;
   semester?: string;
   academicYear: string;
+  ticketCode?: string;
+  attended?: boolean;
+  attendedAt?: string;
+  scannedBy?: string;
   registeredAt: string;
 }
 
@@ -310,6 +330,24 @@ export interface SiteSettings {
     discord?: string;
   };
   mapUrl?: string;
+  festMode?: {
+    isActive: boolean;
+    festName: string;
+    themeTagline?: string;
+    happeningNow?: {
+      title: string;
+      venue: string;
+      startTime?: string;
+      coordinator?: string;
+    };
+    upNext?: {
+      title: string;
+      venue: string;
+      startTime?: string;
+    };
+    announcement?: string;
+    emergencyContact?: string;
+  };
 }
 
 export interface SearchResultItem {
@@ -318,4 +356,39 @@ export interface SearchResultItem {
   title: string;
   subtitle: string;
   url: string;
+}
+
+export interface BadgeItem {
+  id: string;
+  name: string;
+  tier: 'bronze' | 'silver' | 'gold' | 'purple' | 'diamond';
+  description: string;
+  icon: string;
+  earned: boolean;
+}
+
+export interface CulturalCreditsData {
+  usn: string;
+  studentName: string;
+  totalCredits: number;
+  registrationsCount: number;
+  attendedCount: number;
+  projectsCount: number;
+  isCommitteeMember: boolean;
+  badges: BadgeItem[];
+  nextTier: {
+    name: string;
+    requiredPoints: number;
+    remaining: number;
+  };
+}
+
+export interface LeaderboardEntry {
+  usn: string;
+  name: string;
+  totalCredits: number;
+  attendedCount: number;
+  projectsCount: number;
+  isCommitteeMember: boolean;
+  badgesCount: number;
 }

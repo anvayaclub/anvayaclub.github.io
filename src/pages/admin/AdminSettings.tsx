@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Save, Loader2 } from 'lucide-react';
+import { Settings, Save, Loader2, Sparkles, Radio, Music, Clock, MapPin, Bell } from 'lucide-react';
 import { api } from '../../services/api';
 import { SiteSettings } from '../../types';
 import { useToast } from '../../context/ToastContext';
@@ -16,6 +16,16 @@ export const AdminSettings: React.FC = () => {
   const [linkedin, setLinkedin] = useState('https://in.linkedin.com/in/anvaya-club-011908443');
   const [github, setGithub] = useState('https://github.com/anvayaclub');
   const [mapUrl, setMapUrl] = useState('https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur');
+
+  // Annual Fest Microsite Mode State (Feature 4)
+  const [festIsActive, setFestIsActive] = useState(false);
+  const [festName, setFestName] = useState('Anvaya Taranga 2026');
+  const [festTagline, setFestTagline] = useState('ISE Annual Cultural Fest & Exhibition');
+  const [currentPerformance, setCurrentPerformance] = useState('Solo Classical Vocals Competition — Main Stage');
+  const [currentVenue, setCurrentVenue] = useState('Main Auditorium Stage');
+  const [nextPerformance, setNextPerformance] = useState('Western Group Dance Clash');
+  const [nextTime, setNextTime] = useState('In 25 Mins (02:30 PM)');
+  const [festAnnouncement, setFestAnnouncement] = useState('Audience voting is now live in the Events tab! • Food & Art stalls open at the Campus Quadrangle.');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,6 +48,17 @@ export const AdminSettings: React.FC = () => {
           setLinkedin(d.socialLinks?.linkedin || '');
           setGithub(d.socialLinks?.github || '');
           setMapUrl(d.mapUrl || '');
+
+          if (d.festMode) {
+            setFestIsActive(d.festMode.isActive || false);
+            if (d.festMode.festName) setFestName(d.festMode.festName);
+            if (d.festMode.themeTagline) setFestTagline(d.festMode.themeTagline);
+            if (d.festMode.happeningNow?.title) setCurrentPerformance(d.festMode.happeningNow.title);
+            if (d.festMode.happeningNow?.venue) setCurrentVenue(d.festMode.happeningNow.venue);
+            if (d.festMode.upNext?.title) setNextPerformance(d.festMode.upNext.title);
+            if (d.festMode.upNext?.startTime) setNextTime(d.festMode.upNext.startTime);
+            if (d.festMode.announcement) setFestAnnouncement(d.festMode.announcement);
+          }
         }
       } catch (err: any) {
         error(err.message || 'Failed to load settings.');
@@ -67,10 +88,25 @@ export const AdminSettings: React.FC = () => {
           github,
         },
         mapUrl,
+        festMode: {
+          isActive: festIsActive,
+          festName: festName.trim(),
+          themeTagline: festTagline.trim(),
+          happeningNow: {
+            title: currentPerformance.trim(),
+            venue: currentVenue.trim(),
+          },
+          upNext: {
+            title: nextPerformance.trim(),
+            venue: currentVenue.trim(),
+            startTime: nextTime.trim(),
+          },
+          announcement: festAnnouncement.trim(),
+        },
       });
 
       if (res.success) {
-        success('Site settings and links updated successfully.');
+        success('Site settings and Fest Live Mode updated successfully.');
       }
     } catch (err: any) {
       error(err.message || 'Failed to update settings.');
@@ -223,6 +259,148 @@ export const AdminSettings: React.FC = () => {
                 onChange={e => setGithub(e.target.value)}
                 placeholder="https://github.com/..."
                 className="w-full px-3 py-1.5 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ANNUAL FEST MICROSITE LIVE MODE (FEATURE 4) */}
+        <div className="space-y-4 pt-4 border-t border-ivory-200 dark:border-plum-800">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Radio className={`w-4 h-4 ${festIsActive ? 'text-emerald-500 animate-pulse' : 'text-gray-400'}`} />
+                <span className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">
+                  Annual Fest Microsite Live Mode
+                </span>
+                {festIsActive ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    Active on Homepage
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-500/15 text-gray-500">
+                    Inactive
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                Transforms the public homepage during fest days with real-time "Happening Now" and "Up Next" stage broadcasts.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setFestIsActive(!festIsActive)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                festIsActive
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                  : 'bg-ivory-200 dark:bg-plum-800 text-plum-900 dark:text-ivory-200 border-ivory-300 dark:border-plum-700'
+              }`}
+            >
+              {festIsActive ? 'Fest Mode: ON' : 'Fest Mode: OFF'}
+            </button>
+          </div>
+
+          <div className={`p-4 rounded-2xl border space-y-4 transition-all ${
+            festIsActive
+              ? 'bg-gradient-to-br from-gold-500/10 via-saffron-500/5 to-transparent border-gold-500/30'
+              : 'bg-ivory-50 dark:bg-plum-950/50 border-ivory-200 dark:border-plum-800'
+          }`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                  Fest Name
+                </label>
+                <input
+                  type="text"
+                  value={festName}
+                  onChange={(e) => setFestName(e.target.value)}
+                  placeholder="e.g. Anvaya Taranga 2026"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                  Fest Tagline
+                </label>
+                <input
+                  type="text"
+                  value={festTagline}
+                  onChange={(e) => setFestTagline(e.target.value)}
+                  placeholder="e.g. Celebrating Art, Rhythm & Expression"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-gold-700 dark:text-gold-400 mb-0.5 font-semibold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
+                  <span>Happening Now (Current Performance / Competition)</span>
+                </label>
+                <input
+                  type="text"
+                  value={currentPerformance}
+                  onChange={(e) => setCurrentPerformance(e.target.value)}
+                  placeholder="e.g. Classical Dance Finals — Main Stage"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                  Current Stage Venue
+                </label>
+                <input
+                  type="text"
+                  value={currentVenue}
+                  onChange={(e) => setCurrentVenue(e.target.value)}
+                  placeholder="e.g. KIT Main Auditorium"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                  Up Next (Next Performance)
+                </label>
+                <input
+                  type="text"
+                  value={nextPerformance}
+                  onChange={(e) => setNextPerformance(e.target.value)}
+                  placeholder="e.g. Rock Band Medley Clash"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                  Up Next Estimated Time / Countdown
+                </label>
+                <input
+                  type="text"
+                  value={nextTime}
+                  onChange={(e) => setNextTime(e.target.value)}
+                  placeholder="e.g. In 20 Mins (03:15 PM)"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 font-medium">
+                Live Announcement Ticker / Coordinator Note
+              </label>
+              <input
+                type="text"
+                value={festAnnouncement}
+                onChange={(e) => setFestAnnouncement(e.target.value)}
+                placeholder="e.g. Live audience polling is now open in Events! • Food stalls open at the Quadrangle."
+                className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-plum-950 dark:text-ivory-50 text-xs"
               />
             </div>
           </div>

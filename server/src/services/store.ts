@@ -695,6 +695,24 @@ export const memoryStore: MemoryStoreData = {
       discord: '',
     },
     mapUrl: 'https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur',
+    festMode: {
+      isActive: false,
+      festName: 'Kalotsava 2026',
+      themeTagline: 'Celebrating Culture, Art & Technology',
+      happeningNow: {
+        title: 'Classical & Semi-Classical Solo Dance',
+        venue: 'Main Auditorium',
+        startTime: '10:30 AM',
+        coordinator: 'Kavya N (President)',
+      },
+      upNext: {
+        title: 'Battle of the Bands — Acoustic Prelims',
+        venue: 'Open Air Amphitheatre',
+        startTime: '12:00 PM',
+      },
+      announcement: 'Registration for spot events closes at 11:00 AM at the central desk.',
+      emergencyContact: '+91 8431 674384',
+    },
     updatedAt: new Date().toISOString(),
   }
 };

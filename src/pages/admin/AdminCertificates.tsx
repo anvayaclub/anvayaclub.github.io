@@ -57,6 +57,7 @@ export const AdminCertificates: React.FC = () => {
   const [singleName, setSingleName] = useState('');
   const [singleUsn, setSingleUsn] = useState('');
   const [addingSingle, setAddingSingle] = useState(false);
+  const [syncingRegistrations, setSyncingRegistrations] = useState(false);
 
   const fetchConfigs = async () => {
     setLoading(true);
@@ -245,6 +246,23 @@ export const AdminCertificates: React.FC = () => {
       error(err.message || 'Import failed.');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleSyncRegistrations = async () => {
+    if (!activeConfig) return;
+    setSyncingRegistrations(true);
+    try {
+      const res = await api.certificates.syncRegistrations(activeConfig.id);
+      if (res.success) {
+        success(res.message);
+        fetchParticipants(activeConfig.id);
+        fetchConfigs();
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to sync event registrations.');
+    } finally {
+      setSyncingRegistrations(false);
     }
   };
 
@@ -633,6 +651,20 @@ export const AdminCertificates: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncRegistrations}
+                  disabled={syncingRegistrations}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-peacock-600 text-white hover:bg-peacock-500 shadow disabled:opacity-50 transition-colors"
+                  title="Automatically synchronize all registered attendees from this event into certificate participants"
+                >
+                  {syncingRegistrations ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Users className="w-4 h-4" />
+                  )}
+                  <span>Sync Event Registrations</span>
+                </button>
                 <button
                   onClick={() => setImportModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gold-600 text-white hover:bg-gold-500 shadow"

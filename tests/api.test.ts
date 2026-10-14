@@ -940,5 +940,190 @@ describe('Anvaya Cultural Committee API Test Suite', () => {
       expect(deleteAudit).toBeDefined();
     });
   });
+
+  // ==========================================
+  // CULTURAL UPGRADES & NEW FEATURES SUITE
+  // ==========================================
+
+  describe('Cultural Upgrades: Features 1, 2, 4, 5, 7', () => {
+    let generatedTicketCode = '';
+    const testUsn = '1KI23IS088';
+
+    // Feature 1: Digital Tickets & Scanner Verification
+    describe('Feature 1: Dynamic Event Ticket Pass & Scanner Verification', () => {
+      it('POST /api/events/:id/register should generate unique ticketCode', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/register')
+          .send({
+            fullName: 'Rakshith Gowda',
+            usn: testUsn,
+            email: 'rakshith@kit-tiptur.ac.in',
+            phone: '9845012345',
+            branch: 'ISE',
+            semester: '4th Semester',
+          });
+
+        expect(res.status).toBe(201);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.ticketCode).toBeDefined();
+        expect(res.body.data.ticketCode).toMatch(/^TKT-/);
+        generatedTicketCode = res.body.data.ticketCode;
+      });
+
+      it('POST /api/events/:id/verify-ticket should verify valid ticket and mark attended', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/verify-ticket')
+          .send({ ticketCode: generatedTicketCode });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.registration).toBeDefined();
+        expect(res.body.registration.attended).toBe(true);
+        expect(res.body.registration.usn).toBe(testUsn);
+      });
+
+      it('POST /api/events/:id/verify-ticket should detect already scanned tickets', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/verify-ticket')
+          .send({ ticketCode: generatedTicketCode });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.alreadyCheckedIn).toBe(true);
+      });
+
+      it('POST /api/events/:id/verify-ticket should reject non-existent ticket codes', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/verify-ticket')
+          .send({ ticketCode: 'TKT-INVALID-CODE' });
+
+        expect(res.status).toBe(404);
+        expect(res.body.success).toBe(false);
+      });
+    });
+
+    // Feature 2: Audience Choice Voting & Live Polling
+    describe('Feature 2: Live Audience Choice Voting & Polling', () => {
+      it('POST /api/events/:id/poll should configure audience live poll', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/poll')
+          .set('Authorization', `Bearer ${technicalToken}`)
+          .send({
+            isOpen: true,
+            title: 'Best Choreography Audience Choice',
+            nominees: [
+              { id: 'nom_1', name: 'Rhythm Warriors', title: 'Yakshagana Contemporary Act' },
+              { id: 'nom_2', name: 'Step Synchrony', title: 'Folk Medley Performance' },
+            ],
+          });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.nominees.length).toBe(2);
+      });
+
+      it('GET /api/events/:id/poll should return open poll with zero initial votes', async () => {
+        const res = await request(app).get('/api/events/ev_1/poll');
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.isOpen).toBe(true);
+        expect(res.body.data.totalVotes).toBe(0);
+      });
+
+      it('POST /api/events/:id/poll/vote should cast a vote for a nominee', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/poll/vote')
+          .send({ nomineeId: 'nom_1', usn: testUsn });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+      });
+
+      it('POST /api/events/:id/poll/vote should prevent duplicate vote from same USN', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/poll/vote')
+          .send({ nomineeId: 'nom_2', usn: testUsn });
+
+        expect(res.status).toBe(400);
+        expect(res.body.success).toBe(false);
+        expect(res.body.message).toContain('already cast');
+      });
+    });
+
+    // Feature 4: Annual Fest Microsite Mode
+    describe('Feature 4: Annual Fest Microsite Mode', () => {
+      it('GET /api/settings should include festMode configuration', async () => {
+        const res = await request(app).get('/api/settings');
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.festMode).toBeDefined();
+      });
+
+      it('PUT /api/settings should update festMode live broadcast details', async () => {
+        const res = await request(app)
+          .put('/api/settings')
+          .set('Authorization', `Bearer ${technicalToken}`)
+          .send({
+            festMode: {
+              isActive: true,
+              festName: 'Anvaya Taranga 2026',
+              themeTagline: 'Celebrating Art, Rhythm & Heritage',
+              happeningNow: {
+                title: 'Classical Solo Finals',
+                venue: 'Main Auditorium',
+              },
+              upNext: {
+                title: 'Battle of the Bands',
+                venue: 'Open Air Amphitheatre',
+                startTime: '03:00 PM',
+              },
+              announcement: 'Voting open for dance finalists!',
+            },
+          });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.festMode.isActive).toBe(true);
+        expect(res.body.data.festMode.happeningNow.title).toBe('Classical Solo Finals');
+      });
+    });
+
+    // Feature 5: Automated Event Reminders
+    describe('Feature 5: Automated Event Reminders & Notification System', () => {
+      it('POST /api/events/:id/send-reminders should dispatch reminders to registered students', async () => {
+        const res = await request(app)
+          .post('/api/events/ev_1/send-reminders')
+          .set('Authorization', `Bearer ${technicalToken}`)
+          .send({ customNote: 'Please carry student ID card' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.count).toBeGreaterThan(0);
+      });
+    });
+
+    // Feature 7: Cultural Credits & Gamified Badges
+    describe('Feature 7: Cultural Credits & Gamified Badges', () => {
+      it('GET /api/credits/student/:usn should calculate credits and badges for student', async () => {
+        const res = await request(app).get(`/api/credits/student/${testUsn}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.totalCredits).toBeGreaterThan(0);
+        expect(res.body.data.badges).toBeDefined();
+        expect(Array.isArray(res.body.data.badges)).toBe(true);
+      });
+
+      it('GET /api/credits/leaderboard should return department cultural honor roll', async () => {
+        const res = await request(app).get('/api/credits/leaderboard');
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(Array.isArray(res.body.data)).toBe(true);
+      });
+    });
+  });
 });
 

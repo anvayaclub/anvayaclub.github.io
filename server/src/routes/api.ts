@@ -28,7 +28,13 @@ import {
   registerForEvent,
   getEventRegistrations,
   exportEventRegistrationsCsv,
+  verifyTicket,
+  sendEventReminders,
+  getEventPoll,
+  configureEventPoll,
+  voteInEventPoll,
 } from '../controllers/eventController.js';
+import { getStudentCredits, getCreditsLeaderboard } from '../controllers/creditsController.js';
 import {
   getActiveConfigs,
   verifyCertificate,
@@ -42,6 +48,7 @@ import {
   toggleRevoke,
   deleteParticipant,
   exportBackup,
+  syncEventRegistrations,
 } from '../controllers/certificateController.js';
 import {
   getProjects,
@@ -135,6 +142,16 @@ router.delete('/events/:id', authenticateToken, requireTechnical, deleteEvent);
 router.post('/events/:id/register', optionalAuth, registerForEvent);
 router.get('/events/:id/registrations', authenticateToken, requireTechnical, getEventRegistrations);
 router.get('/events/:id/registrations/export', authenticateToken, requireTechnical, exportEventRegistrationsCsv);
+router.post('/events/:id/verify-ticket', optionalAuth, verifyTicket);
+router.post('/events/:id/send-reminders', authenticateToken, requireTechnical, sendEventReminders);
+router.get('/events/:id/poll', optionalAuth, getEventPoll);
+router.post('/events/:id/poll', authenticateToken, requireTechnical, configureEventPoll);
+router.post('/events/:id/poll/vote', optionalAuth, voteInEventPoll);
+
+// Cultural Credits & Badges
+router.get('/credits/leaderboard', getCreditsLeaderboard);
+router.get('/credits/student/:usn', optionalAuth, getStudentCredits);
+router.get('/credits/me', authenticateToken, getStudentCredits);
 
 // 5. Certificates & Verification
 router.get('/certificates/configs', getActiveConfigs);
@@ -149,6 +166,7 @@ router.post('/certificates/admin/configs/:id/import', authenticateToken, require
 router.patch('/certificates/admin/participants/:participantId/revoke', authenticateToken, requireTechnical, toggleRevoke);
 router.delete('/certificates/admin/participants/:participantId', authenticateToken, requireTechnical, deleteParticipant);
 router.get('/certificates/admin/configs/:id/backup', authenticateToken, requireTechnical, exportBackup);
+router.post('/certificates/admin/configs/:id/sync-registrations', authenticateToken, requireTechnical, syncEventRegistrations);
 
 // 6. Student Projects & Showcase
 router.get('/projects', getProjects);

@@ -16,10 +16,18 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
+  QrCode,
+  Bell,
+  Vote,
+  Check,
+  Search,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { EventItem, EventRegistration } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 
 export const AdminEvents: React.FC = () => {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -61,6 +69,191 @@ export const AdminEvents: React.FC = () => {
   const [currentEventTitle, setCurrentEventTitle] = useState('');
   const [attendees, setAttendees] = useState<EventRegistration[]>([]);
   const [loadingAttendees, setLoadingAttendees] = useState(false);
+
+  const { user } = useAuth();
+
+  // Volunteer Scanner Modal State (Feature 1)
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [scannerEvent, setScannerEvent] = useState<EventItem | null>(null);
+  const [ticketInput, setTicketInput] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{
+    success: boolean;
+    message: string;
+    registration?: any;
+    alreadyAttended?: boolean;
+  } | null>(null);
+
+  // Reminders Modal State (Feature 5)
+  const [reminderModalOpen, setReminderModalOpen] = useState(false);
+  const [reminderEvent, setReminderEvent] = useState<EventItem | null>(null);
+  const [sendingReminder, setSendingReminder] = useState(false);
+
+  // Poll Modal State (Feature 2)
+  const [pollModalOpen, setPollModalOpen] = useState(false);
+  const [pollEvent, setPollEvent] = useState<EventItem | null>(null);
+  const [pollIsOpen, setPollIsOpen] = useState(true);
+  const [pollTitle, setPollTitle] = useState('Audience Choice Best Performance Award');
+  const [pollNominees, setPollNominees] = useState<Array<{ id: string; name: string; title: string; voteCount?: number }>>([]);
+  const [savingPoll, setSavingPoll] = useState(false);
+  const [loadingPoll, setLoadingPoll] = useState(false);
+
+  const openScanner = (ev: EventItem) => {
+    setScannerEvent(ev);
+    setTicketInput('');
+    setScanResult(null);
+    setScannerModalOpen(true);
+  };
+
+  const handleVerifyTicket = async (e?: React.FormEvent, directCode?: string) => {
+    if (e) e.preventDefault();
+    const query = directCode || ticketInput.trim();
+    if (!query || !scannerEvent) return;
+
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const evId = scannerEvent.id || (scannerEvent as any)._id || '';
+      const isUsn = query.toUpperCase().startsWith('1KI') || query.length === 10;
+      const res = await api.events.verifyTicket(evId, {
+        ticketCode: isUsn ? undefined : query,
+        usn: isUsn ? query : undefined,
+      });
+      if (res.success) {
+        setScanResult({
+          success: true,
+          message: res.message,
+          registration: res.registration,
+          alreadyAttended: res.alreadyCheckedIn,
+        });
+        success(res.message);
+        if (!directCode) setTicketInput('');
+        if (attendeesModalOpen && currentEventId === evId) {
+          const updated = await api.events.getRegistrations(evId);
+          if (updated.success) setAttendees(updated.data);
+        }
+      }
+    } catch (err: any) {
+      setScanResult({
+        success: false,
+        message: err.message || 'Ticket code verification failed.',
+      });
+      error(err.message || 'Verification failed.');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleQuickCheckIn = async (att: EventRegistration) => {
+    try {
+      const res = await api.events.verifyTicket(currentEventId, {
+        ticketCode: att.ticketCode,
+        usn: att.usn,
+      });
+      if (res.success) {
+        success(`Checked in ${att.fullName} (${att.usn})`);
+        setAttendees(prev =>
+          prev.map(a =>
+            a.id === att.id || a.usn === att.usn ? { ...a, attended: true, attendedAt: new Date().toISOString() } : a
+          )
+        );
+      }
+    } catch (err: any) {
+      error(err.message || 'Check-in failed.');
+    }
+  };
+
+  const openReminders = (ev: EventItem) => {
+    setReminderEvent(ev);
+    setReminderModalOpen(true);
+  };
+
+  const handleSendReminders = async () => {
+    if (!reminderEvent) return;
+    setSendingReminder(true);
+    try {
+      const evId = reminderEvent.id || (reminderEvent as any)._id || '';
+      const res = await api.events.sendReminders(evId);
+      if (res.success) {
+        success(res.message || 'Event reminders sent successfully!');
+        setReminderModalOpen(false);
+        fetchEvents();
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to send reminders.');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
+
+  const openPoll = async (ev: EventItem) => {
+    setPollEvent(ev);
+    setPollModalOpen(true);
+    setLoadingPoll(true);
+    try {
+      const evId = ev.id || (ev as any)._id || '';
+      const res = await api.events.getPoll(evId);
+      if (res.success && res.data?.poll) {
+        setPollIsOpen(res.data.poll.isOpen !== false);
+        setPollTitle(res.data.poll.title || 'Audience Choice Best Performance Award');
+        setPollNominees(res.data.poll.nominees || []);
+      } else {
+        setPollIsOpen(true);
+        setPollTitle('Audience Choice Best Performance Award');
+        setPollNominees([
+          { id: '1', name: 'Classical Fusion Troupe', title: 'Bharatanatyam Fusion Act' },
+          { id: '2', name: 'Acoustic Beats', title: 'Retro Medley Performance' },
+        ]);
+      }
+    } catch (err) {
+      setPollIsOpen(true);
+      setPollTitle('Audience Choice Best Performance Award');
+      setPollNominees([
+        { id: '1', name: 'Classical Fusion Troupe', title: 'Bharatanatyam Fusion Act' },
+        { id: '2', name: 'Acoustic Beats', title: 'Retro Medley Performance' },
+      ]);
+    } finally {
+      setLoadingPoll(false);
+    }
+  };
+
+  const handleAddNominee = () => {
+    setPollNominees(prev => [
+      ...prev,
+      { id: String(Date.now()), name: '', title: '' },
+    ]);
+  };
+
+  const handleRemoveNominee = (index: number) => {
+    setPollNominees(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSavePoll = async () => {
+    if (!pollEvent) return;
+    const validNominees = pollNominees.filter(n => n.name.trim() && n.title.trim());
+    if (validNominees.length < 2) {
+      error('Please add at least 2 nominees with name and performance title.');
+      return;
+    }
+
+    setSavingPoll(true);
+    try {
+      const evId = pollEvent.id || (pollEvent as any)._id || '';
+      const res = await api.events.configurePoll(evId, {
+        isOpen: pollIsOpen,
+        title: pollTitle.trim(),
+        nominees: validNominees,
+      });
+      if (res.success) {
+        success(res.message || 'Audience choice poll updated successfully.');
+        setPollModalOpen(false);
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to save audience poll.');
+    } finally {
+      setSavingPoll(false);
+    }
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -333,7 +526,7 @@ export const AdminEvents: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Link
                             to={`/events/${ev.slug}`}
                             target="_blank"
@@ -342,6 +535,41 @@ export const AdminEvents: React.FC = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </Link>
+
+                          {/* Volunteer Scanner (Feature 1) */}
+                          <button
+                            onClick={() => openScanner(ev)}
+                            className="p-1.5 rounded-lg text-peacock-600 dark:text-peacock-400 hover:bg-peacock-500/10 transition-colors"
+                            title="Volunteer Entry Ticket Scanner"
+                          >
+                            <QrCode className="w-4 h-4" />
+                          </button>
+
+                          {/* Send Reminders (Feature 5) */}
+                          <button
+                            onClick={() => openReminders(ev)}
+                            className={`p-1.5 rounded-lg transition-colors relative ${
+                              ev.remindersSent
+                                ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                                : 'text-gold-600 dark:text-gold-400 hover:bg-gold-500/10'
+                            }`}
+                            title={ev.remindersSent ? 'Reminders already dispatched' : 'Dispatch Event Reminders'}
+                          >
+                            <Bell className="w-4 h-4" />
+                            {ev.remindersSent && (
+                              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            )}
+                          </button>
+
+                          {/* Audience Choice Poll (Feature 2) */}
+                          <button
+                            onClick={() => openPoll(ev)}
+                            className="p-1.5 rounded-lg text-saffron-600 dark:text-saffron-400 hover:bg-saffron-500/10 transition-colors"
+                            title="Configure Audience Choice Live Poll"
+                          >
+                            <Vote className="w-4 h-4" />
+                          </button>
+
                           <button
                             onClick={() => openEdit(ev)}
                             className="p-1.5 rounded-lg text-plum-700 dark:text-ivory-200 hover:bg-ivory-200 dark:hover:bg-plum-800 transition-colors"
@@ -722,6 +950,11 @@ export const AdminEvents: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                {attendees.length > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-mono">
+                    Checked In: {attendees.filter(a => a.attended).length} / {attendees.length}
+                  </span>
+                )}
                 {currentEventId && attendees.length > 0 && (
                   <a
                     href={api.events.getRegistrationsExportUrl(currentEventId)}
@@ -754,10 +987,10 @@ export const AdminEvents: React.FC = () => {
                       <tr>
                         <th className="px-4 py-2.5">Student Name</th>
                         <th className="px-4 py-2.5">USN</th>
-                        <th className="px-4 py-2.5">Branch & Semester</th>
-                        <th className="px-4 py-2.5">Email</th>
+                        <th className="px-4 py-2.5">Branch</th>
+                        <th className="px-4 py-2.5">Ticket Code</th>
                         <th className="px-4 py-2.5">Phone</th>
-                        <th className="px-4 py-2.5">Registered At</th>
+                        <th className="px-4 py-2.5 text-center">Attendance</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-ivory-200 dark:divide-plum-800">
@@ -772,14 +1005,25 @@ export const AdminEvents: React.FC = () => {
                           <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                             {att.branch} {att.semester ? `· ${att.semester}` : ''}
                           </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                            {att.email}
+                          <td className="px-4 py-3 font-mono font-bold text-plum-900 dark:text-ivory-100 text-[11px]">
+                            {att.ticketCode || '—'}
                           </td>
                           <td className="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono">
                             {att.phone}
                           </td>
-                          <td className="px-4 py-3 text-gray-400 text-[11px]">
-                            {new Date(att.registeredAt).toLocaleDateString()}
+                          <td className="px-4 py-3 text-center">
+                            {att.attended ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                <Check className="w-3 h-3" /> Checked In
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleQuickCheckIn(att)}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-700 dark:text-gold-400 hover:bg-gold-500 hover:text-white transition-all"
+                              >
+                                <QrCode className="w-3 h-3" /> Check In
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -791,6 +1035,340 @@ export const AdminEvents: React.FC = () => {
                   No registrations have been submitted for this event yet.
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VOLUNTEER ENTRY SCANNER MODAL (FEATURE 1) */}
+      {scannerModalOpen && scannerEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-plum-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white dark:bg-plum-900 rounded-3xl border border-ivory-300 dark:border-plum-800 shadow-2xl overflow-hidden space-y-5 p-6">
+            <div className="flex items-center justify-between border-b border-ivory-200 dark:border-plum-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-peacock-500/15 text-peacock-600 dark:text-peacock-400">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-plum-950 dark:text-ivory-50">
+                    Volunteer Entry Ticket Scanner
+                  </h3>
+                  <p className="text-[11px] text-gray-500 truncate max-w-xs">{scannerEvent.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setScannerModalOpen(false)}
+                className="p-1 rounded-full hover:bg-ivory-200 dark:hover:bg-plum-800 text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Ticket Search Form */}
+            <form onSubmit={handleVerifyTicket} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                  Scan QR / Ticket Code / Student USN
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={ticketInput}
+                    onChange={(e) => setTicketInput(e.target.value)}
+                    placeholder="e.g. TKT-98AE-319F or 1KI22IS001"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-xs font-mono uppercase text-plum-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                  />
+                  <button
+                    type="submit"
+                    disabled={scanning || !ticketInput.trim()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gold-600 hover:bg-gold-500 transition-all disabled:opacity-50"
+                  >
+                    {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    <span>Verify</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Works with USB/Bluetooth barcode/QR scanners or manual keyboard input.
+                </p>
+              </div>
+            </form>
+
+            {/* Scan Feedback Banner */}
+            {scanResult && (
+              <div
+                className={`p-4 rounded-2xl border text-xs space-y-2 animate-fadeIn ${
+                  scanResult.success
+                    ? scanResult.alreadyAttended
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                    : 'bg-red-500/10 border-red-500/30 text-red-800 dark:text-red-200'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  {scanResult.success ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  )}
+                  <span>{scanResult.message}</span>
+                </div>
+
+                {scanResult.registration && (
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-plum-950/70 border border-inherit text-xs space-y-1">
+                    <div className="font-bold text-plum-950 dark:text-ivory-50">
+                      {scanResult.registration.fullName}
+                    </div>
+                    <div className="font-mono text-[11px] text-gold-600 dark:text-gold-400">
+                      USN: {scanResult.registration.usn} • {scanResult.registration.branch}
+                    </div>
+                    <div className="text-[10px] text-gray-500 font-mono">
+                      Ticket: {scanResult.registration.ticketCode}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setScannerModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-ivory-200 dark:hover:bg-plum-800 transition-all"
+              >
+                Close Scanner
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EVENT REMINDERS DISPATCH MODAL (FEATURE 5) */}
+      {reminderModalOpen && reminderEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-plum-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white dark:bg-plum-900 rounded-3xl border border-ivory-300 dark:border-plum-800 shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-ivory-200 dark:border-plum-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-gold-500/15 text-gold-600 dark:text-gold-400">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-plum-950 dark:text-ivory-50">
+                    Dispatch Event Reminders
+                  </h3>
+                  <p className="text-[11px] text-gray-400">Automated Notification System</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReminderModalOpen(false)}
+                className="p-1 rounded-full hover:bg-ivory-200 dark:hover:bg-plum-800 text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-ivory-100 dark:bg-plum-950 border border-ivory-200 dark:border-plum-800 text-xs space-y-2">
+              <div className="font-semibold text-plum-950 dark:text-ivory-50">
+                {reminderEvent.title}
+              </div>
+              <div className="text-gray-500 dark:text-gray-400">
+                Date: {new Date(reminderEvent.dateTime).toLocaleDateString('en-IN', { dateStyle: 'full' })} at {reminderEvent.startTime || '10:00 AM'}
+              </div>
+              <div className="text-gray-500 dark:text-gray-400">
+                Venue: {reminderEvent.venue}
+              </div>
+              <div className="pt-2 text-gold-600 dark:text-gold-400 font-mono font-bold">
+                Target: {reminderEvent.regCount || 0} registered student attendees
+              </div>
+            </div>
+
+            {reminderEvent.remindersSent && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  Reminders were already dispatched for this event on{' '}
+                  {reminderEvent.remindersSentAt ? new Date(reminderEvent.remindersSentAt).toLocaleString() : 'a previous date'}.
+                </span>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Sending reminders will trigger email digests and schedule calendar alerts with digital ticket access links for all registered participants.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setReminderModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-ivory-200 dark:hover:bg-plum-800 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sendingReminder || (reminderEvent.regCount || 0) === 0}
+                onClick={handleSendReminders}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gold-600 hover:bg-gold-500 shadow-md transition-all disabled:opacity-50"
+              >
+                {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                <span>{sendingReminder ? 'Dispatching...' : 'Send Reminders Now'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE AUDIENCE POLL CONFIGURATION MODAL (FEATURE 2) */}
+      {pollModalOpen && pollEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-plum-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-plum-900 rounded-3xl border border-ivory-300 dark:border-plum-800 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-ivory-200 dark:border-plum-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-gold-500/15 text-gold-600 dark:text-gold-400">
+                  <Vote className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-plum-950 dark:text-ivory-50">
+                    Live Audience Choice Poll
+                  </h3>
+                  <p className="text-[11px] text-gray-400">{pollEvent.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPollModalOpen(false)}
+                className="p-1 rounded-full hover:bg-ivory-200 dark:hover:bg-plum-800 text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-5">
+              {loadingPoll ? (
+                <div className="py-12 text-center">
+                  <Loader2 className="w-6 h-6 text-gold-500 animate-spin mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">Loading poll settings...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Status & Title */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200">
+                        Poll Title / Award Category
+                      </label>
+                      <input
+                        type="text"
+                        value={pollTitle}
+                        onChange={(e) => setPollTitle(e.target.value)}
+                        placeholder="e.g. Audience Choice Best Performance Award"
+                        className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-xs text-plum-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200">
+                        Live Voting Status
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setPollIsOpen(!pollIsOpen)}
+                        className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border transition-all ${
+                          pollIsOpen
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                            : 'bg-gray-500/15 text-gray-700 dark:text-gray-300 border-gray-500/30'
+                        }`}
+                      >
+                        {pollIsOpen ? '● Voting Open' : '○ Voting Closed'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nominees List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 font-mono">
+                        Nominees / Contestants ({pollNominees.length})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={handleAddNominee}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-gold-600 hover:bg-gold-500 transition-all shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Nominee</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {pollNominees.map((nominee, idx) => (
+                        <div
+                          key={nominee.id || idx}
+                          className="p-3.5 rounded-2xl bg-ivory-50 dark:bg-plum-950 border border-ivory-200 dark:border-plum-800 flex flex-col sm:flex-row items-center gap-3"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-gold-500/15 text-gold-600 dark:text-gold-400 font-mono text-xs flex items-center justify-center font-bold">
+                            {idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Nominee / Performer Name"
+                            value={nominee.name}
+                            onChange={(e) => {
+                              const updated = [...pollNominees];
+                              updated[idx].name = e.target.value;
+                              setPollNominees(updated);
+                            }}
+                            className="flex-1 px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-xs text-plum-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Performance / Song / Act Title"
+                            value={nominee.title}
+                            onChange={(e) => {
+                              const updated = [...pollNominees];
+                              updated[idx].title = e.target.value;
+                              setPollNominees(updated);
+                            }}
+                            className="flex-1 px-3 py-1.5 rounded-xl bg-white dark:bg-plum-900 border border-ivory-300 dark:border-plum-700 text-xs text-plum-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                          />
+                          {nominee.voteCount !== undefined && (
+                            <span className="px-2.5 py-1 rounded-lg bg-gold-500/10 text-gold-700 dark:text-gold-400 font-mono text-xs font-bold">
+                              {nominee.voteCount} votes
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveNominee(idx)}
+                            disabled={pollNominees.length <= 2}
+                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 disabled:opacity-30 transition-all"
+                            title="Remove Nominee"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-ivory-200 dark:border-plum-800 flex items-center justify-end gap-3 bg-ivory-50 dark:bg-plum-950">
+              <button
+                type="button"
+                onClick={() => setPollModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-ivory-200 dark:hover:bg-plum-800 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingPoll || loadingPoll}
+                onClick={handleSavePoll}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-gold-600 to-saffron-500 hover:from-gold-500 hover:to-saffron-600 shadow-md transition-all disabled:opacity-50"
+              >
+                {savingPoll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                <span>Save & Update Poll</span>
+              </button>
             </div>
           </div>
         </div>

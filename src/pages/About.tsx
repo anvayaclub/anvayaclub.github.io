@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Heart, Compass, Shield, Users, Trophy, Music, Palette, BookOpen, Film, ArrowRight } from 'lucide-react';
+import { Sparkles, Heart, Compass, Shield, Users, Trophy, Music, Palette, BookOpen, Film, ArrowRight, Award } from 'lucide-react';
 import { AnvayaLogo } from '../components/common/AnvayaLogo';
+import { CulturalCreditsModal } from '../components/credits/CulturalCreditsModal';
 
 export const About: React.FC = () => {
+  const [creditsModalOpen, setCreditsModalOpen] = useState(false);
   const domains = [
     {
       title: 'Performing Arts & Dance',
@@ -153,7 +155,60 @@ export const About: React.FC = () => {
         </div>
       </section>
 
-      {/* 4. Leadership & Call to Action */}
+      {/* 4. Cultural Credits & Gamified Student Accolades (Feature 7) */}
+      <section className="p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-gold-500/10 via-saffron-500/5 to-transparent border-2 border-gold-500/30 shadow-lg space-y-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gold-500/15 text-gold-700 dark:text-gold-300 text-xs font-mono font-bold uppercase tracking-wider">
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Cultural Gamification & Honor Roll</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-serif font-bold text-plum-950 dark:text-ivory-50">
+              Cultural Credits & Verified Badges
+            </h2>
+            <p className="text-xs sm:text-sm text-plum-700 dark:text-ivory-300 leading-relaxed font-sans">
+              Every event you register for, stage performance you deliver, and initiative you lead earns verified Cultural Credits. Climb the department ranks from Cultural Explorer to Anvaya Legend.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setCreditsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl text-xs font-semibold text-white bg-gradient-to-r from-gold-600 to-saffron-500 hover:from-gold-500 hover:to-saffron-600 shadow-md shadow-gold-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+          >
+            <Trophy className="w-4 h-4" />
+            <span>Check My Cultural Credits & Ranks</span>
+          </button>
+        </div>
+
+        {/* Tier Badges Showcase Preview */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-ivory-200 dark:border-plum-800 text-center space-y-1.5">
+            <div className="text-2xl">🌱</div>
+            <div className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">Cultural Explorer</div>
+            <div className="text-[10px] text-gray-500">1st Event Registration</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-ivory-200 dark:border-plum-800 text-center space-y-1.5">
+            <div className="text-2xl">🎭</div>
+            <div className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">Active Performer</div>
+            <div className="text-[10px] text-gold-600 dark:text-gold-400 font-semibold">50+ Credits</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-ivory-200 dark:border-plum-800 text-center space-y-1.5">
+            <div className="text-2xl">👑</div>
+            <div className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">Cultural Maestro</div>
+            <div className="text-[10px] text-gold-600 dark:text-gold-400 font-semibold">100+ Credits</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-gold-500/40 text-center space-y-1.5 ring-1 ring-gold-500/20">
+            <div className="text-2xl">💎</div>
+            <div className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">Anvaya Legend</div>
+            <div className="text-[10px] text-gold-600 dark:text-gold-400 font-semibold">200+ Credits</div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Leadership & Call to Action */}
       <section className="p-8 sm:p-12 rounded-3xl bg-ivory-100 dark:bg-plum-900/80 border border-ivory-300 dark:border-plum-800 flex flex-col md:flex-row items-center justify-between gap-8">
         <div className="space-y-3 max-w-xl">
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-plum-950 dark:text-ivory-50">
@@ -181,6 +236,12 @@ export const About: React.FC = () => {
           </Link>
         </div>
       </section>
+
+      {/* Cultural Credits & Badges Modal */}
+      <CulturalCreditsModal
+        isOpen={creditsModalOpen}
+        onClose={() => setCreditsModalOpen(false)}
+      />
     </div>
   );
 };

@@ -139,6 +139,12 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/about" className="hover:text-gold-600 dark:hover:text-gold-400 transition-colors flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-saffron-500"></span>
+                  Cultural Credits & Honor Roll
+                </Link>
+              </li>
+              <li>
                 <Link to="/contact" className="hover:text-gold-600 dark:hover:text-gold-400 transition-colors">
                   Contact Committee
                 </Link>

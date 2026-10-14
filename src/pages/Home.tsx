@@ -13,29 +13,34 @@ import {
   Clock,
   MapPin,
   CheckCircle2,
+  Radio,
+  Vote,
 } from 'lucide-react';
 import { AnvayaLogo } from '../components/common/AnvayaLogo';
 import { api } from '../services/api';
-import { EventItem, AnnouncementItem, GalleryMediaItem } from '../types';
+import { EventItem, AnnouncementItem, GalleryMediaItem, SiteSettings } from '../types';
 
 export const Home: React.FC = () => {
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [recentMedia, setRecentMedia] = useState<GalleryMediaItem[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [eventsRes, annRes, mediaRes] = await Promise.all([
+        const [eventsRes, annRes, mediaRes, settingsRes] = await Promise.all([
           api.events.getAll({ status: 'upcoming' }),
           api.communication.getAnnouncements(),
           api.gallery.getMedia({ type: 'photo' }),
+          api.communication.getSettings(),
         ]);
 
         if (eventsRes.success) setUpcomingEvents(eventsRes.data.slice(0, 3));
         if (annRes.success) setAnnouncements(annRes.data.slice(0, 3));
         if (mediaRes.success) setRecentMedia(mediaRes.data.slice(0, 4));
+        if (settingsRes.success && settingsRes.data) setSiteSettings(settingsRes.data);
       } catch (err) {
         console.error('Failed to load homepage data:', err);
       } finally {
@@ -53,7 +58,87 @@ export const Home: React.FC = () => {
         {/* Subtle decorative glowing gradients */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-gradient-to-tr from-gold-500/10 to-plum-600/10 dark:from-gold-500/15 dark:to-plum-700/20 blur-3xl rounded-full pointer-events-none -z-10"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          {/* ANNUAL FEST MICROSITE LIVE MODE (FEATURE 4) */}
+          {siteSettings?.festMode?.isActive && (
+            <div className="max-w-4xl mx-auto rounded-3xl bg-gradient-to-br from-gold-500/20 via-saffron-500/10 to-gold-500/15 dark:from-plum-900/90 dark:via-plum-950 dark:to-plum-900 border-2 border-gold-500/50 shadow-2xl p-6 sm:p-7 space-y-4 backdrop-blur-md animate-fadeIn">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gold-500/20 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Live Fest Broadcast
+                  </span>
+                  <span className="text-gray-300 dark:text-gray-600">•</span>
+                  <span className="text-xs font-serif font-bold text-plum-950 dark:text-ivory-50">
+                    {siteSettings.festMode.festName || 'Anvaya Taranga 2026'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/events"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-gold-600 to-saffron-500 hover:from-gold-500 hover:to-saffron-600 shadow-sm transition-all"
+                  >
+                    <Vote className="w-3.5 h-3.5" />
+                    <span>Live Audience Voting</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Stage Broadcast Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Happening Now */}
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-gold-500/30 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-gold-700 dark:text-gold-300">
+                    <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                    <span>Happening Now On Stage</span>
+                  </div>
+                  <div className="text-sm font-serif font-bold text-plum-950 dark:text-ivory-50 leading-snug">
+                    {siteSettings.festMode.happeningNow?.title || 'Solo & Group Performances in progress'}
+                  </div>
+                  {siteSettings.festMode.happeningNow?.venue && (
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      <MapPin className="w-3 h-3 text-gold-500 flex-shrink-0" />
+                      <span>{siteSettings.festMode.happeningNow.venue}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Up Next */}
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-plum-900/80 border border-gold-500/30 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-peacock-700 dark:text-peacock-300">
+                    <Clock className="w-3.5 h-3.5 text-peacock-500" />
+                    <span>Up Next</span>
+                    {siteSettings.festMode.upNext?.startTime && (
+                      <span className="text-[10px] font-bold text-gold-600 dark:text-gold-400 ml-auto">
+                        {siteSettings.festMode.upNext.startTime}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm font-serif font-bold text-plum-950 dark:text-ivory-50 leading-snug">
+                    {siteSettings.festMode.upNext?.title || 'Follow-up Competition Events'}
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Report with college ID at the venue desk.
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Announcement Ticker */}
+              {siteSettings.festMode.announcement && (
+                <div className="p-3 rounded-xl bg-gold-500/10 border border-gold-500/20 text-xs text-plum-900 dark:text-ivory-100 flex items-center gap-2">
+                  <Bell className="w-3.5 h-3.5 text-gold-500 flex-shrink-0 animate-bounce" />
+                  <span className="font-medium text-[11px] truncate">
+                    {siteSettings.festMode.announcement}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="text-center max-w-3xl mx-auto space-y-6">
             {/* Prominent Official Anvaya Logo with Elegant Golden Aura */}
             <div className="inline-flex flex-col items-center gap-4">

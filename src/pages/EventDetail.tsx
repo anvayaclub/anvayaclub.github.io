@@ -22,6 +22,9 @@ import { EventItem } from '../types';
 import { useToast } from '../context/ToastContext';
 
 import { useAuth } from '../context/AuthContext';
+import { DigitalEventPass } from '../components/events/DigitalEventPass';
+import { EventLivePoll } from '../components/events/EventLivePoll';
+import { QrCode as QrIcon } from 'lucide-react';
 
 export const EventDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -39,6 +42,29 @@ export const EventDetail: React.FC = () => {
   const [academicYear, setAcademicYear] = useState('3rd Year');
   const [submitting, setSubmitting] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [passData, setPassData] = useState<{
+    fullName: string;
+    usn: string;
+    branch?: string;
+    ticketCode: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!event) return;
+    const eventKey = (event as any)._id || event.id || event.slug || slug;
+    try {
+      const savedPass = localStorage.getItem(`anvaya_event_pass_${eventKey}`);
+      if (savedPass) {
+        const parsed = JSON.parse(savedPass);
+        if (parsed && parsed.ticketCode) {
+          setPassData(parsed);
+          setRegistered(true);
+        }
+      }
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+  }, [event, slug]);
 
   useEffect(() => {
     if (user) {
@@ -96,7 +122,19 @@ export const EventDetail: React.FC = () => {
       });
 
       if (res.success) {
+        const ticketCode = res.data?.ticketCode || `TKT-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        const newPassData = {
+          fullName,
+          usn: usn.trim().toUpperCase(),
+          branch,
+          ticketCode,
+        };
+        setPassData(newPassData);
         setRegistered(true);
+        const eventKey = (event as any)._id || event.id || event.slug || slug;
+        try {
+          localStorage.setItem(`anvaya_event_pass_${eventKey}`, JSON.stringify(newPassData));
+        } catch (e) {}
         success(res.message);
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
         // Update local event reg count
@@ -322,15 +360,47 @@ export const EventDetail: React.FC = () => {
             )}
 
             {registered ? (
-              <div className="p-5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Registration Confirmed!</span>
+              passData ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Registration Confirmed!</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRegistered(false)}
+                      className="text-[11px] text-gold-600 dark:text-gold-400 hover:underline"
+                    >
+                      Register another student
+                    </button>
+                  </div>
+                  <DigitalEventPass
+                    eventTitle={event.title}
+                    eventDate={new Date(event.dateTime).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                    startTime={event.startTime}
+                    venue={event.venue}
+                    fullName={passData.fullName}
+                    usn={passData.usn}
+                    branch={passData.branch}
+                    ticketCode={passData.ticketCode}
+                  />
                 </div>
-                <p>
-                  Your registration for <strong>{event.title}</strong> has been successfully recorded. Please report with your college ID at the venue.
-                </p>
-              </div>
+              ) : (
+                <div className="p-5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <span>Registration Confirmed!</span>
+                  </div>
+                  <p>
+                    Your registration for <strong>{event.title}</strong> has been successfully recorded. Please report with your college ID at the venue.
+                  </p>
+                </div>
+              )
             ) : isClosed ? (
               <div className="p-4 rounded-xl bg-gray-500/10 border border-gray-500/20 text-gray-600 dark:text-gray-400 text-xs">
                 Registrations for this programme are closed or have reached maximum capacity.
@@ -463,6 +533,12 @@ export const EventDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Live Audience Voting & Polling (Feature 2) */}
+      <EventLivePoll
+        eventId={(event as any)._id || event.id || ''}
+        eventTitle={event.title}
+      />
     </div>
   );
 };

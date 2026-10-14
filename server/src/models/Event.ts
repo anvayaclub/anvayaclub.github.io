@@ -35,6 +35,24 @@ export interface IEventDocument extends Document {
     winners?: IEventWinner[];
   };
   relatedAlbumId?: string;
+  remindersSent?: boolean;
+  remindersSentAt?: Date;
+  poll?: {
+    isOpen: boolean;
+    title: string;
+    nominees: Array<{
+      id: string;
+      name: string;
+      usn?: string;
+      title: string;
+      votesCount: number;
+    }>;
+    votes: Array<{
+      usn: string;
+      nomineeId: string;
+      votedAt: Date;
+    }>;
+  };
   createdAt: Date;
 }
 
@@ -42,6 +60,27 @@ const EventWinnerSchema = new Schema<IEventWinner>({
   position: { type: String, required: true },
   name: { type: String, required: true },
   usn: { type: String },
+}, { _id: false });
+
+const EventPollNomineeSchema = new Schema({
+  id: { type: String, required: true },
+  name: { type: String, required: true },
+  usn: { type: String },
+  title: { type: String, required: true },
+  votesCount: { type: Number, default: 0 },
+}, { _id: false });
+
+const EventPollVoteSchema = new Schema({
+  usn: { type: String, required: true },
+  nomineeId: { type: String, required: true },
+  votedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const EventPollSchema = new Schema({
+  isOpen: { type: Boolean, default: false },
+  title: { type: String, default: 'Audience Choice Award' },
+  nominees: [EventPollNomineeSchema],
+  votes: [EventPollVoteSchema],
 }, { _id: false });
 
 const EventSchema = new Schema<IEventDocument>({
@@ -73,6 +112,9 @@ const EventSchema = new Schema<IEventDocument>({
     winners: [EventWinnerSchema],
   },
   relatedAlbumId: { type: String },
+  remindersSent: { type: Boolean, default: false },
+  remindersSentAt: { type: Date },
+  poll: { type: EventPollSchema },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -92,6 +134,10 @@ export interface IEventRegistrationDocument extends Document {
   branch: string;
   semester?: string;
   academicYear: string;
+  ticketCode?: string;
+  attended: boolean;
+  attendedAt?: Date;
+  scannedBy?: string;
   registeredAt: Date;
 }
 
@@ -106,10 +152,15 @@ const EventRegistrationSchema = new Schema<IEventRegistrationDocument>({
   branch: { type: String, required: true, trim: true },
   semester: { type: String, trim: true },
   academicYear: { type: String, required: true, trim: true },
+  ticketCode: { type: String, trim: true },
+  attended: { type: Boolean, default: false },
+  attendedAt: { type: Date },
+  scannedBy: { type: String, trim: true },
   registeredAt: { type: Date, default: Date.now },
 });
 
 EventRegistrationSchema.index({ eventId: 1, usn: 1 }, { unique: true });
+EventRegistrationSchema.index({ ticketCode: 1 });
 
 EventRegistrationSchema.set('toJSON', { virtuals: true });
 EventRegistrationSchema.set('toObject', { virtuals: true });

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { Event, EventRegistration } from '../models/Event.js';
 import { CertificateConfig } from '../models/Certificate.js';
+import { AuditLog } from '../models/AuditLog.js';
 import { isDbConnected } from '../config/db.js';
 import { memoryStore } from '../services/store.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -437,6 +438,8 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         userObjectId = req.user.id;
       }
 
+      const ticketCode = `TKT-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+
       const registration = await EventRegistration.create({
         eventId: event._id,
         eventTitle: event.title,
@@ -448,6 +451,8 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         branch: branch || 'ISE',
         semester: semester || '6th Semester',
         academicYear: academicYear || '3rd Year',
+        ticketCode,
+        attended: false,
       });
 
       await Event.findByIdAndUpdate(event._id, { $inc: { regCount: 1 } });
@@ -458,6 +463,7 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         data: {
           ...registration.toObject({ virtuals: true }),
           id: registration._id.toString(),
+          ticketCode,
         },
       });
     } else {
@@ -503,6 +509,7 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
       }
 
       const regId = `reg_${Date.now()}`;
+      const ticketCode = `TKT-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
       const newReg = {
         _id: regId,
         id: regId,
@@ -516,6 +523,8 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
         branch: branch || 'ISE',
         semester: semester || '6th Semester',
         academicYear: academicYear || '3rd Year',
+        ticketCode,
+        attended: false,
         registeredAt: new Date().toISOString(),
       };
 
@@ -580,9 +589,9 @@ export const exportEventRegistrationsCsv = async (req: Request, res: Response): 
       registrations = memoryStore.eventRegistrations.filter(r => r.eventId === id);
     }
 
-    const header = 'Full Name,USN,Email,Phone,Branch,Semester,Registered At\n';
+    const header = 'Full Name,USN,Email,Phone,Branch,Semester,Ticket Code,Attended,Attended At,Registered At\n';
     const rows = registrations
-      .map(r => `"${r.fullName}","${r.usn}","${r.email}","${r.phone}","${r.branch}","${r.semester || ''}","${r.registeredAt}"`)
+      .map(r => `"${r.fullName}","${r.usn}","${r.email}","${r.phone}","${r.branch}","${r.semester || ''}","${r.ticketCode || ''}","${r.attended ? 'Yes' : 'No'}","${r.attendedAt ? new Date(r.attendedAt).toISOString() : ''}","${r.registeredAt}"`)
       .join('\n');
 
     const csvContent = header + rows;
@@ -595,3 +604,433 @@ export const exportEventRegistrationsCsv = async (req: Request, res: Response): 
     res.status(500).json({ success: false, message: 'Failed to export registrations.' });
   }
 };
+
+// 7. Dynamic QR Code Event Entry & Volunteer Check-In
+export const verifyTicket = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { ticketCode, usn } = req.body;
+
+    if (!ticketCode && !usn) {
+      res.status(400).json({ success: false, message: 'Ticket code or student USN is required for verification.' });
+      return;
+    }
+
+    if (isDbConnected()) {
+      let query: any = {};
+      if (ticketCode) {
+        query.ticketCode = ticketCode.trim().toUpperCase();
+      } else {
+        query.usn = usn.trim().toUpperCase();
+        if (id && mongoose.isValidObjectId(id)) {
+          query.eventId = id;
+        }
+      }
+
+      const registration = await EventRegistration.findOne(query);
+      if (!registration) {
+        res.status(404).json({ success: false, message: 'No registration record found for this ticket / USN.' });
+        return;
+      }
+
+      if (registration.attended) {
+        res.json({
+          success: true,
+          alreadyCheckedIn: true,
+          message: `Ticket already scanned on ${new Date(registration.attendedAt!).toLocaleTimeString()} by ${registration.scannedBy || 'Coordinator'}.`,
+          registration: {
+            ...registration.toObject({ virtuals: true }),
+            id: registration._id.toString(),
+          },
+        });
+        return;
+      }
+
+      registration.attended = true;
+      registration.attendedAt = new Date();
+      registration.scannedBy = req.user?.name || 'Committee Coordinator';
+      await registration.save();
+
+      res.json({
+        success: true,
+        alreadyCheckedIn: false,
+        message: `Check-in confirmed for ${registration.fullName} (${registration.usn})!`,
+        registration: {
+          ...registration.toObject({ virtuals: true }),
+          id: registration._id.toString(),
+        },
+      });
+    } else {
+      let reg: any = null;
+      if (ticketCode) {
+        reg = memoryStore.eventRegistrations.find(
+          r => r.ticketCode?.toUpperCase() === ticketCode.trim().toUpperCase()
+        );
+      } else {
+        const normalizedUsn = usn.trim().toUpperCase();
+        reg = memoryStore.eventRegistrations.find(
+          r => r.usn?.toUpperCase() === normalizedUsn && (!id || r.eventId === id)
+        );
+      }
+
+      if (!reg) {
+        res.status(404).json({ success: false, message: 'No registration record found for this ticket / USN.' });
+        return;
+      }
+
+      if (reg.attended) {
+        res.json({
+          success: true,
+          alreadyCheckedIn: true,
+          message: `Ticket already scanned on ${new Date(reg.attendedAt!).toLocaleTimeString()} by ${reg.scannedBy || 'Coordinator'}.`,
+          registration: reg,
+        });
+        return;
+      }
+
+      reg.attended = true;
+      reg.attendedAt = new Date().toISOString();
+      reg.scannedBy = req.user?.name || 'Committee Coordinator';
+
+      res.json({
+        success: true,
+        alreadyCheckedIn: false,
+        message: `Check-in confirmed for ${reg.fullName} (${reg.usn})!`,
+        registration: reg,
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to verify ticket.' });
+  }
+};
+
+// 8. Automated Event Reminders & Notifications
+export const sendEventReminders = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { customNote } = req.body || {};
+
+    if (isDbConnected()) {
+      const event = await Event.findById(id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      const registrations = await EventRegistration.find({ eventId: id });
+      event.remindersSent = true;
+      event.remindersSentAt = new Date();
+      await event.save();
+
+      // Audit Log
+      await AuditLog.create({
+        action: 'EVENT_REMINDERS_SENT',
+        performedBy: req.user?.id as any,
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUserName: event.title,
+        details: {
+          eventId: event._id,
+          recipientCount: registrations.length,
+          customNote,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        success: true,
+        count: registrations.length,
+        message: `Event reminder dispatched to ${registrations.length} registered participant(s).`,
+      });
+    } else {
+      const event = memoryStore.events.find(e => (e._id || e.id) === id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      const registrations = memoryStore.eventRegistrations.filter(r => r.eventId === id);
+      event.remindersSent = true;
+      event.remindersSentAt = new Date().toISOString();
+
+      memoryStore.auditLogs.push({
+        _id: `audit_${Date.now()}`,
+        action: 'EVENT_REMINDERS_SENT',
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUserName: event.title,
+        details: { eventId: id, recipientCount: registrations.length, customNote },
+        createdAt: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        count: registrations.length,
+        message: `Event reminder dispatched to ${registrations.length} registered participant(s).`,
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to dispatch event reminders.' });
+  }
+};
+
+// 9. Live Audience Choice Voting & Polling
+export const getEventPoll = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userUsn = req.user?.usn || (req.query.usn as string)?.toUpperCase();
+
+    if (isDbConnected()) {
+      let event: any = null;
+      if (mongoose.isValidObjectId(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) event = await Event.findOne({ slug: id });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      const poll = event.poll || {
+        isOpen: false,
+        title: 'Audience Choice Award',
+        nominees: [],
+        votes: [],
+      };
+
+      const hasVoted = Boolean(userUsn && poll.votes?.some((v: any) => v.usn === userUsn));
+      const userVote = poll.votes?.find((v: any) => v.usn === userUsn);
+
+      res.json({
+        success: true,
+        data: {
+          isOpen: poll.isOpen || false,
+          title: poll.title || 'Audience Choice Award',
+          nominees: poll.nominees || [],
+          totalVotes: poll.votes?.length || 0,
+          hasVoted,
+          votedNomineeId: userVote?.nomineeId,
+        },
+      });
+    } else {
+      const event = memoryStore.events.find(e => (e._id || e.id) === id || e.slug === id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      const poll = event.poll || {
+        isOpen: false,
+        title: 'Audience Choice Award',
+        nominees: [],
+        votes: [],
+      };
+
+      const hasVoted = Boolean(userUsn && poll.votes?.some((v: any) => v.usn === userUsn));
+      const userVote = poll.votes?.find((v: any) => v.usn === userUsn);
+
+      res.json({
+        success: true,
+        data: {
+          isOpen: poll.isOpen || false,
+          title: poll.title || 'Audience Choice Award',
+          nominees: poll.nominees || [],
+          totalVotes: poll.votes?.length || 0,
+          hasVoted,
+          votedNomineeId: userVote?.nomineeId,
+        },
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve event poll.' });
+  }
+};
+
+export const configureEventPoll = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { title, isOpen, nominees } = req.body;
+
+    if (isDbConnected()) {
+      const event = await Event.findById(id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      if (!event.poll) {
+        event.poll = {
+          isOpen: Boolean(isOpen),
+          title: title || 'Audience Choice Award',
+          nominees: nominees || [],
+          votes: [],
+        };
+      } else {
+        if (title !== undefined) event.poll.title = title;
+        if (isOpen !== undefined) event.poll.isOpen = isOpen;
+        if (nominees !== undefined) {
+          event.poll.nominees = nominees.map((n: any) => {
+            const existing = event.poll?.nominees.find((old: any) => old.id === n.id);
+            return {
+              id: n.id || `nom_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+              name: n.name,
+              usn: n.usn,
+              title: n.title,
+              votesCount: existing ? existing.votesCount : 0,
+            };
+          });
+        }
+      }
+
+      await event.save();
+      res.json({ success: true, message: 'Live event poll configured.', data: event.poll });
+    } else {
+      const event = memoryStore.events.find(e => (e._id || e.id) === id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      if (!event.poll) {
+        event.poll = {
+          isOpen: Boolean(isOpen),
+          title: title || 'Audience Choice Award',
+          nominees: nominees || [],
+          votes: [],
+        };
+      } else {
+        if (title !== undefined) event.poll.title = title;
+        if (isOpen !== undefined) event.poll.isOpen = isOpen;
+        if (nominees !== undefined) {
+          event.poll.nominees = nominees.map((n: any) => {
+            const existing = event.poll.nominees.find((old: any) => old.id === n.id);
+            return {
+              id: n.id || `nom_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+              name: n.name,
+              usn: n.usn,
+              title: n.title,
+              votesCount: existing ? existing.votesCount : 0,
+            };
+          });
+        }
+      }
+
+      res.json({ success: true, message: 'Live event poll configured.', data: event.poll });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to configure event poll.' });
+  }
+};
+
+export const voteInEventPoll = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { nomineeId, usn } = req.body;
+
+    const voterUsn = (req.user?.usn || usn)?.trim().toUpperCase();
+
+    if (!voterUsn) {
+      res.status(400).json({ success: false, message: 'Valid student USN is required to cast a vote.' });
+      return;
+    }
+
+    if (!nomineeId) {
+      res.status(400).json({ success: false, message: 'Please select a nominee to vote for.' });
+      return;
+    }
+
+    if (isDbConnected()) {
+      let event: any = null;
+      if (mongoose.isValidObjectId(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) event = await Event.findOne({ slug: id });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      if (!event.poll || !event.poll.isOpen) {
+        res.status(400).json({ success: false, message: 'Voting is currently closed for this event.' });
+        return;
+      }
+
+      const alreadyVoted = event.poll.votes.some((v: any) => v.usn === voterUsn);
+      if (alreadyVoted) {
+        res.status(400).json({ success: false, message: 'You have already cast your vote in this poll. One vote per student.' });
+        return;
+      }
+
+      const nominee = event.poll.nominees.find((n: any) => n.id === nomineeId);
+      if (!nominee) {
+        res.status(404).json({ success: false, message: 'Selected nominee not found.' });
+        return;
+      }
+
+      nominee.votesCount = (nominee.votesCount || 0) + 1;
+      event.poll.votes.push({
+        usn: voterUsn,
+        nomineeId,
+        votedAt: new Date(),
+      });
+
+      await event.save();
+
+      res.json({
+        success: true,
+        message: `Your vote for ${nominee.name} has been counted!`,
+        data: {
+          nomineeId,
+          totalVotes: event.poll.votes.length,
+          nominees: event.poll.nominees,
+        },
+      });
+    } else {
+      const event = memoryStore.events.find(e => (e._id || e.id) === id || e.slug === id);
+      if (!event) {
+        res.status(404).json({ success: false, message: 'Event not found.' });
+        return;
+      }
+
+      if (!event.poll || !event.poll.isOpen) {
+        res.status(400).json({ success: false, message: 'Voting is currently closed for this event.' });
+        return;
+      }
+
+      const alreadyVoted = event.poll.votes?.some((v: any) => v.usn === voterUsn);
+      if (alreadyVoted) {
+        res.status(400).json({ success: false, message: 'You have already cast your vote in this poll. One vote per student.' });
+        return;
+      }
+
+      const nominee = event.poll.nominees?.find((n: any) => n.id === nomineeId);
+      if (!nominee) {
+        res.status(404).json({ success: false, message: 'Selected nominee not found.' });
+        return;
+      }
+
+      nominee.votesCount = (nominee.votesCount || 0) + 1;
+      if (!event.poll.votes) event.poll.votes = [];
+      event.poll.votes.push({
+        usn: voterUsn,
+        nomineeId,
+        votedAt: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: `Your vote for ${nominee.name} has been counted!`,
+        data: {
+          nomineeId,
+          totalVotes: event.poll.votes.length,
+          nominees: event.poll.nominees,
+        },
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to record vote.' });
+  }
+};
+

@@ -1,8 +1,46 @@
 import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { CertificateConfig, CertificateParticipant } from '../models/Certificate.js';
+import { Event, EventRegistration } from '../models/Event.js';
 import { isDbConnected } from '../config/db.js';
 import { memoryStore } from '../services/store.js';
+
+// Resilient name matching helper (handles middle initials, whitespace, case, punctuation)
+export function isNameMatching(inputName: string, recordName: string): boolean {
+  const clean = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const cInput = clean(inputName);
+  const cRecord = clean(recordName);
+
+  if (!cInput || !cRecord) return false;
+  if (cInput === cRecord) return true;
+  if (cRecord.includes(cInput) || cInput.includes(cRecord)) return true;
+
+  const inputTokens = cInput.split(' ').filter(Boolean);
+  const recordTokens = cRecord.split(' ').filter(Boolean);
+
+  const sigInput = inputTokens.filter(t => t.length > 1);
+  const sigRecord = recordTokens.filter(t => t.length > 1);
+
+  if (sigInput.length > 0 && sigInput.every(t => recordTokens.includes(t))) {
+    return true;
+  }
+  if (sigRecord.length > 0 && sigRecord.every(t => inputTokens.includes(t))) {
+    return true;
+  }
+
+  const matchedTokens = inputTokens.filter(t => recordTokens.includes(t));
+  if (matchedTokens.length >= 2 || (matchedTokens.length === 1 && matchedTokens[0].length >= 3 && (inputTokens.length === 1 || recordTokens.length === 1))) {
+    return true;
+  }
+
+  return false;
+}
 
 // Public endpoint: list active certificate configs
 export const getActiveConfigs = async (_req: Request, res: Response): Promise<void> => {
@@ -49,7 +87,6 @@ export const verifyCertificate = async (req: Request, res: Response): Promise<vo
     }
 
     const normalizedUsn = usn.trim().toUpperCase();
-    const normalizedName = fullName.trim().toLowerCase().replace(/\s+/g, ' ');
 
     let config: any = null;
     let participant: any = null;
@@ -66,11 +103,60 @@ export const verifyCertificate = async (req: Request, res: Response): Promise<vo
         return;
       }
 
-      // Query participant by config and USN
+      // 1. Query participant by config and USN
       participant = await CertificateParticipant.findOne({
         configId: config._id,
         usn: normalizedUsn,
       });
+
+      // 2. Fallback / Auto-resolution: If not in CertificateParticipant, check EventRegistration
+      if (!participant) {
+        const regQuery: any = { usn: normalizedUsn };
+        if (config.eventId) {
+          regQuery.eventId = config.eventId;
+        } else if (config.eventTitle) {
+          regQuery.eventTitle = { $regex: new RegExp(`^${config.eventTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+        }
+
+        const registration = await EventRegistration.findOne(regQuery);
+
+        if (registration) {
+          if (!isNameMatching(fullName, registration.fullName)) {
+            res.status(400).json({
+              success: false,
+              message: `Name verification failed. The provided name does not match the registered participant record for USN "${normalizedUsn}".`,
+            });
+            return;
+          }
+
+          const currentYear = new Date().getFullYear();
+          const certNumber = `ANVAYA-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}-${Date.now().toString().slice(-4)}`;
+
+          try {
+            participant = await CertificateParticipant.create({
+              configId: config._id,
+              fullName: registration.fullName || fullName.trim(),
+              usn: normalizedUsn,
+              certificateNumber: certNumber,
+              isRevoked: false,
+              issuedAt: registration.attendedAt || new Date(),
+            });
+
+            await CertificateConfig.findByIdAndUpdate(config._id, {
+              $inc: { participantsCount: 1 },
+            });
+          } catch (createErr: any) {
+            // Handled in case of simultaneous requests
+            participant = await CertificateParticipant.findOne({
+              configId: config._id,
+              usn: normalizedUsn,
+            });
+            if (!participant) {
+              throw createErr;
+            }
+          }
+        }
+      }
 
       if (!participant) {
         res.status(404).json({
@@ -80,9 +166,8 @@ export const verifyCertificate = async (req: Request, res: Response): Promise<vo
         return;
       }
 
-      // Fuzzy check name
-      const recordName = participant.fullName.trim().toLowerCase().replace(/\s+/g, ' ');
-      if (!recordName.includes(normalizedName) && !normalizedName.includes(recordName)) {
+      // Check name match against participant record
+      if (!isNameMatching(fullName, participant.fullName)) {
         res.status(400).json({
           success: false,
           message: `Name verification failed. The provided name does not match the registered participant record for USN "${normalizedUsn}".`,
@@ -113,6 +198,42 @@ export const verifyCertificate = async (req: Request, res: Response): Promise<vo
         p => (p.configId === configId || p.configId === config._id) && p.usn === normalizedUsn
       );
 
+      // Memory store fallback to eventRegistrations
+      if (!participant) {
+        const cfgId = config._id || config.id;
+        const reg = memoryStore.eventRegistrations.find(
+          r => r.usn.toUpperCase() === normalizedUsn && (
+            (config.eventId && (r.eventId === config.eventId || r.eventId === cfgId)) ||
+            (config.eventTitle && r.eventTitle.toLowerCase() === config.eventTitle.toLowerCase())
+          )
+        );
+
+        if (reg) {
+          if (!isNameMatching(fullName, reg.fullName)) {
+            res.status(400).json({
+              success: false,
+              message: `Name verification failed. The provided name does not match the registered participant record for USN "${normalizedUsn}".`,
+            });
+            return;
+          }
+
+          const currentYear = new Date().getFullYear();
+          const certNumber = `ANVAYA-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}-${Date.now().toString().slice(-4)}`;
+          participant = {
+            _id: `cp_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            id: `cp_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            configId: cfgId,
+            fullName: reg.fullName || fullName.trim(),
+            usn: normalizedUsn,
+            certificateNumber: certNumber,
+            isRevoked: false,
+            issuedAt: new Date().toISOString(),
+          };
+          memoryStore.certificateParticipants.push(participant);
+          config.participantsCount = (config.participantsCount || 0) + 1;
+        }
+      }
+
       if (!participant) {
         res.status(404).json({
           success: false,
@@ -121,8 +242,7 @@ export const verifyCertificate = async (req: Request, res: Response): Promise<vo
         return;
       }
 
-      const recordName = participant.fullName.trim().toLowerCase().replace(/\s+/g, ' ');
-      if (!recordName.includes(normalizedName) && !normalizedName.includes(recordName)) {
+      if (!isNameMatching(fullName, participant.fullName)) {
         res.status(400).json({
           success: false,
           message: `Name verification failed. The provided name does not match the registered participant record for USN "${normalizedUsn}".`,
@@ -591,3 +711,122 @@ export const exportBackup = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ success: false, message: 'Failed to export backup.' });
   }
 };
+
+// Admin: Synchronize event registrations directly into certificate participants
+export const syncEventRegistrations = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid configuration identifier.' });
+      return;
+    }
+
+    let config: any = null;
+    let registrations: any[] = [];
+    const currentYear = new Date().getFullYear();
+    let syncedCount = 0;
+    let existingCount = 0;
+
+    if (isDbConnected()) {
+      config = await CertificateConfig.findById(id);
+      if (!config) {
+        res.status(404).json({ success: false, message: 'Certificate configuration not found.' });
+        return;
+      }
+
+      const regQuery: any = {};
+      if (config.eventId) {
+        regQuery.eventId = config.eventId;
+      } else if (config.eventTitle) {
+        regQuery.eventTitle = { $regex: new RegExp(`^${config.eventTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+      }
+
+      registrations = await EventRegistration.find(regQuery);
+
+      for (const reg of registrations) {
+        const normalizedUsn = reg.usn.trim().toUpperCase();
+        const existing = await CertificateParticipant.findOne({
+          configId: config._id,
+          usn: normalizedUsn,
+        });
+
+        if (existing) {
+          existingCount++;
+          continue;
+        }
+
+        const certNumber = `ANVAYA-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}-${Date.now().toString().slice(-4)}`;
+        await CertificateParticipant.create({
+          configId: config._id,
+          fullName: reg.fullName.trim(),
+          usn: normalizedUsn,
+          certificateNumber: certNumber,
+          isRevoked: false,
+          issuedAt: reg.attendedAt || new Date(),
+        });
+        syncedCount++;
+      }
+
+      const totalCount = await CertificateParticipant.countDocuments({ configId: config._id });
+      await CertificateConfig.findByIdAndUpdate(config._id, { participantsCount: totalCount });
+
+      res.json({
+        success: true,
+        message: `Successfully synchronized ${syncedCount} participant(s) from event registrations (${existingCount} already present).`,
+        count: syncedCount,
+        totalParticipants: totalCount,
+      });
+    } else {
+      config = memoryStore.certificateConfigs.find(c => c._id === id || c.id === id);
+      if (!config) {
+        res.status(404).json({ success: false, message: 'Certificate configuration not found.' });
+        return;
+      }
+
+      const cfgId = config._id || config.id;
+      registrations = memoryStore.eventRegistrations.filter(r =>
+        (config.eventId && (r.eventId === config.eventId || r.eventId === cfgId)) ||
+        (config.eventTitle && r.eventTitle.toLowerCase() === config.eventTitle.toLowerCase())
+      );
+
+      for (const reg of registrations) {
+        const normalizedUsn = reg.usn.trim().toUpperCase();
+        const existing = memoryStore.certificateParticipants.find(
+          p => (p.configId === cfgId || p.configId === id) && p.usn === normalizedUsn
+        );
+
+        if (existing) {
+          existingCount++;
+          continue;
+        }
+
+        const certNumber = `ANVAYA-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}-${Date.now().toString().slice(-4)}`;
+        memoryStore.certificateParticipants.push({
+          _id: `cp_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          id: `cp_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          configId: cfgId,
+          fullName: reg.fullName.trim(),
+          usn: normalizedUsn,
+          certificateNumber: certNumber,
+          isRevoked: false,
+          issuedAt: new Date().toISOString(),
+        });
+        syncedCount++;
+      }
+
+      config.participantsCount = memoryStore.certificateParticipants.filter(p => p.configId === cfgId || p.configId === id).length;
+
+      res.json({
+        success: true,
+        message: `Successfully synchronized ${syncedCount} participant(s) from event registrations (${existingCount} already present).`,
+        count: syncedCount,
+        totalParticipants: config.participantsCount,
+      });
+    }
+  } catch (error: any) {
+    console.error('Error in syncEventRegistrations:', error);
+    res.status(500).json({ success: false, message: 'Failed to synchronize event registrations.' });
+  }
+};
+

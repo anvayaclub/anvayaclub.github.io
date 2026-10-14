@@ -87,6 +87,24 @@ export interface ISiteSettingsDocument extends Document {
     discord?: string;
   };
   mapUrl?: string;
+  festMode?: {
+    isActive: boolean;
+    festName: string;
+    themeTagline?: string;
+    happeningNow?: {
+      title: string;
+      venue: string;
+      startTime?: string;
+      coordinator?: string;
+    };
+    upNext?: {
+      title: string;
+      venue: string;
+      startTime?: string;
+    };
+    announcement?: string;
+    emergencyContact?: string;
+  };
   updatedAt: Date;
 }
 
@@ -106,6 +124,24 @@ const SiteSettingsSchema = new Schema<ISiteSettingsDocument>({
     discord: { type: String, default: '' },
   },
   mapUrl: { type: String, default: 'https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur' },
+  festMode: {
+    isActive: { type: Boolean, default: false },
+    festName: { type: String, default: 'Kalotsava 2026' },
+    themeTagline: { type: String, default: 'Celebrating Culture, Art & Technology' },
+    happeningNow: {
+      title: { type: String, default: '' },
+      venue: { type: String, default: '' },
+      startTime: { type: String, default: '' },
+      coordinator: { type: String, default: '' },
+    },
+    upNext: {
+      title: { type: String, default: '' },
+      venue: { type: String, default: '' },
+      startTime: { type: String, default: '' },
+    },
+    announcement: { type: String, default: '' },
+    emergencyContact: { type: String, default: '+91 8431 674384' },
+  },
   updatedAt: { type: Date, default: Date.now },
 });
 

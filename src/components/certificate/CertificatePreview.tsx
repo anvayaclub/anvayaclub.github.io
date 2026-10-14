@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { Download, FileText, CheckCircle2, QrCode, Award, Shield } from 'lucide-react';
+import { Download, FileText, CheckCircle2, QrCode, Award, Shield, Copy, Check } from 'lucide-react';
 import { AnvayaLogo } from '../common/AnvayaLogo';
+import { LinkedinIcon } from '../common/SocialIcons';
 
 export interface VerifiedCertificateData {
   certificateNumber: string;
@@ -26,6 +27,7 @@ export const CertificatePreview: React.FC<CertificatePreviewProps> = ({ data }) 
   const certRef = useRef<HTMLDivElement>(null);
   const [downloadingPng, setDownloadingPng] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const downloadPNG = async () => {
     if (!certRef.current) return;
@@ -74,10 +76,40 @@ export const CertificatePreview: React.FC<CertificatePreviewProps> = ({ data }) 
     }
   };
 
+  const addToLinkedIn = () => {
+    const certTitle = data.certificateTitle || `${data.eventTitle} — Certificate of Participation`;
+    const orgName = 'Anvaya — Department of Information Science & Engineering, KIT Tiptur';
+
+    // Parse issue year and month if available
+    const dateObj = data.issuedAt ? new Date(data.issuedAt) : new Date();
+    const issueYear = dateObj.getFullYear();
+    const issueMonth = dateObj.getMonth() + 1;
+
+    const verificationUrl = `${window.location.origin}/certificate?id=${encodeURIComponent(data.certificateNumber)}`;
+
+    const linkedInUrl = new URL('https://www.linkedin.com/profile/add');
+    linkedInUrl.searchParams.set('startTask', 'CERTIFICATION_NAME');
+    linkedInUrl.searchParams.set('name', certTitle);
+    linkedInUrl.searchParams.set('organizationName', orgName);
+    linkedInUrl.searchParams.set('issueYear', String(issueYear));
+    linkedInUrl.searchParams.set('issueMonth', String(issueMonth));
+    linkedInUrl.searchParams.set('certUrl', verificationUrl);
+    linkedInUrl.searchParams.set('certId', data.certificateNumber);
+
+    window.open(linkedInUrl.toString(), '_blank', 'noopener,noreferrer');
+  };
+
+  const copyVerificationLink = () => {
+    const verificationUrl = `${window.location.origin}/certificate?id=${encodeURIComponent(data.certificateNumber)}`;
+    navigator.clipboard.writeText(verificationUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Action Download Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-ivory-100 dark:bg-plum-900 border border-ivory-300 dark:border-plum-800">
+      {/* Action Download & Professional Integration Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-ivory-100 dark:bg-plum-900 border border-ivory-300 dark:border-plum-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="w-5 h-5" />
@@ -92,22 +124,45 @@ export const CertificatePreview: React.FC<CertificatePreviewProps> = ({ data }) 
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Add to LinkedIn Button */}
+          <button
+            onClick={addToLinkedIn}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-[#0A66C2] hover:bg-[#004182] transition-all shadow-sm"
+            title="Add this verified credential directly to your LinkedIn profile"
+          >
+            <LinkedinIcon className="w-4 h-4 text-white" />
+            <span>Add to LinkedIn</span>
+          </button>
+
+          {/* Copy Verification Link Button */}
+          <button
+            onClick={copyVerificationLink}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-plum-800 text-plum-950 dark:text-ivory-50 border border-ivory-300 dark:border-plum-700 hover:border-gold-500 transition-all shadow-sm"
+            title="Copy unique public verification URL"
+          >
+            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-400" />}
+            <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
+          </button>
+
+          {/* Download PNG Button */}
           <button
             onClick={downloadPNG}
             disabled={downloadingPng}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-plum-800 text-plum-950 dark:text-ivory-50 border border-ivory-300 dark:border-plum-700 hover:border-gold-500 hover:text-gold-600 transition-all shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-plum-800 text-plum-950 dark:text-ivory-50 border border-ivory-300 dark:border-plum-700 hover:border-gold-500 hover:text-gold-600 transition-all shadow-sm disabled:opacity-50"
           >
             <Download className="w-4 h-4 text-gold-500" />
-            <span>{downloadingPng ? 'Generating PNG...' : 'Download as PNG'}</span>
+            <span>{downloadingPng ? 'Generating...' : 'PNG'}</span>
           </button>
+
+          {/* Download PDF Button */}
           <button
             onClick={downloadPDF}
             disabled={downloadingPdf}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-gold-600 to-saffron-600 hover:from-gold-500 hover:to-saffron-500 shadow-md transition-all disabled:opacity-50"
           >
             <FileText className="w-4 h-4" />
-            <span>{downloadingPdf ? 'Generating PDF...' : 'Download as PDF'}</span>
+            <span>{downloadingPdf ? 'Generating...' : 'Download PDF'}</span>
           </button>
         </div>
       </div>

@@ -186,6 +186,37 @@ export const api = {
     delete: (id: string) => request<{ success: boolean; message: string }>(`/events/${id}`, { method: 'DELETE' }),
     getRegistrations: (id: string) => request<{ success: boolean; data: any[] }>(`/events/${id}/registrations`),
     getRegistrationsExportUrl: (id: string) => `${API_BASE}/events/${id}/registrations/export`,
+    verifyTicket: (id: string, body: { ticketCode?: string; usn?: string }) =>
+      request<{ success: boolean; message: string; alreadyCheckedIn?: boolean; registration?: any }>(`/events/${id}/verify-ticket`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    sendReminders: (id: string, body?: { customNote?: string }) =>
+      request<{ success: boolean; message: string; count?: number }>(`/events/${id}/send-reminders`, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      }),
+    getPoll: (id: string, usn?: string) => {
+      const q = usn ? `?usn=${encodeURIComponent(usn)}` : '';
+      return request<{ success: boolean; data: any }>(`/events/${id}/poll${q}`);
+    },
+    configurePoll: (id: string, body: { title?: string; isOpen?: boolean; nominees?: any[] }) =>
+      request<{ success: boolean; message: string; data: any }>(`/events/${id}/poll`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    votePoll: (id: string, body: { nomineeId: string; usn?: string }) =>
+      request<{ success: boolean; message: string; data: any }>(`/events/${id}/poll/vote`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
+
+  // Cultural Credits & Badges
+  credits: {
+    getStudentCredits: (usn: string) => request<{ success: boolean; data: any }>(`/credits/student/${encodeURIComponent(usn)}`),
+    getMyCredits: () => request<{ success: boolean; data: any }>('/credits/me'),
+    getLeaderboard: () => request<{ success: boolean; data: any[] }>('/credits/leaderboard'),
   },
 
   // Certificates
@@ -222,6 +253,10 @@ export const api = {
     deleteParticipant: (participantId: string) =>
       request<{ success: boolean; message: string }>(`/certificates/admin/participants/${participantId}`, { method: 'DELETE' }),
     exportBackup: (configId: string) => request<{ success: boolean; backup: any }>(`/certificates/admin/configs/${configId}/backup`),
+    syncRegistrations: (configId: string) =>
+      request<{ success: boolean; message: string; count: number; totalParticipants?: number }>(`/certificates/admin/configs/${configId}/sync-registrations`, {
+        method: 'POST',
+      }),
   },
 
   // Projects
