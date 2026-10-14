@@ -129,6 +129,16 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body || {}),
       }),
+    update: (id: string, body: { name: string; usn?: string; email: string; branch?: string; semester?: number | string }) =>
+      request<{ success: boolean; message: string; data: any }>(`/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+    delete: (id: string, body?: { reason?: string }) =>
+      request<{ success: boolean; message: string }>(`/users/${id}`, {
+        method: 'DELETE',
+        body: JSON.stringify(body || {}),
+      }),
   },
 
   // Audit Logs

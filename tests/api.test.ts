@@ -744,5 +744,201 @@ describe('Anvaya Cultural Committee API Test Suite', () => {
       expect(res.body.fileUrl).toBeDefined();
     });
   });
+
+  // STUDENT ACCOUNT MANAGEMENT & DELETION
+  describe('Student Account Management, Profile Updates, USN Synchronization, and Permanent Deletion', () => {
+    let testStudentId = '';
+    const initialUsn = '1KI23IS088';
+    const initialEmail = 'kavya@kit-tiptur.ac.in';
+    const studentPassword = 'SecureStudentPassword2026!';
+
+    it('PUT /api/users/:id should reject unauthenticated or non-technical requests', async () => {
+      // Unauthenticated
+      const res1 = await request(app)
+        .put('/api/users/some-id')
+        .send({ name: 'Hacked Name', usn: '1KI23IS099', email: 'hacked@kit.edu' });
+      expect(res1.status).toBe(401);
+
+      // Student token
+      const res2 = await request(app)
+        .put('/api/users/some-id')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ name: 'Hacked Name', usn: '1KI23IS099', email: 'hacked@kit.edu' });
+      expect(res2.status).toBe(403);
+    });
+
+    it('POST /api/auth/register should create a test student account to be managed', async () => {
+      const regRes = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Kavya N',
+          usn: initialUsn,
+          email: initialEmail,
+          password: studentPassword,
+          branch: 'ISE',
+          semester: '6th Semester',
+        });
+
+      expect(regRes.status).toBe(201);
+      expect(regRes.body.success).toBe(true);
+      testStudentId = regRes.body.user.id || regRes.body.user._id;
+      expect(testStudentId).toBeDefined();
+
+      // Add a test team member linked to this student to test cascading USN updates
+      memoryStore.teamMembers.push({
+        _id: 'team_test_kavya',
+        id: 'team_test_kavya',
+        name: 'Kavya N',
+        role: 'Cultural Lead',
+        usn: initialUsn,
+        linkedUserId: testStudentId,
+        accountLinkStatus: 'linked',
+        displayOrder: 99,
+        isActive: true,
+      });
+    });
+
+    it('PUT /api/users/:id should reject duplicate USN or duplicate email', async () => {
+      // Duplicate USN of technical admin
+      const resUsn = await request(app)
+        .put(`/api/users/${testStudentId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({
+          name: 'Kavya N',
+          usn: technicalUsn, // Already in use
+          email: 'kavya.new@kit-tiptur.ac.in',
+        });
+
+      expect(resUsn.status).toBe(400);
+      expect(resUsn.body.success).toBe(false);
+      expect(resUsn.body.message).toContain('already exists with USN');
+
+      // Duplicate email
+      const resEmail = await request(app)
+        .put(`/api/users/${testStudentId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({
+          name: 'Kavya N',
+          usn: '1KI23IS099',
+          email: 'adithya@kit-tiptur.ac.in', // Already in use by technical admin
+        });
+
+      expect(resEmail.status).toBe(400);
+      expect(resEmail.body.success).toBe(false);
+      expect(resEmail.body.message).toContain('already exists with email');
+    });
+
+    it('PUT /api/users/:id should successfully update student details and synchronize USN across records', async () => {
+      const updatedUsn = '1KI23IS099';
+      const updatedEmail = 'kavya.narayan@kit-tiptur.ac.in';
+      const updatedName = 'Kavya Narayan';
+
+      const updateRes = await request(app)
+        .put(`/api/users/${testStudentId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({
+          name: updatedName,
+          usn: updatedUsn,
+          email: updatedEmail,
+          branch: 'ISE',
+          semester: '6th Semester',
+        });
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.success).toBe(true);
+      expect(updateRes.body.data.name).toBe(updatedName);
+      expect(updateRes.body.data.usn).toBe(updatedUsn);
+      expect(updateRes.body.data.email).toBe(updatedEmail);
+
+      // Verify cascading sync in teamMembers
+      const linkedTeamMember = memoryStore.teamMembers.find(tm => (tm._id || tm.id) === 'team_test_kavya');
+      expect(linkedTeamMember).toBeDefined();
+      expect(linkedTeamMember?.usn).toBe(updatedUsn);
+      expect(linkedTeamMember?.name).toBe(updatedName);
+
+      // Verify login with updated USN succeeds
+      const newLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: updatedUsn, password: studentPassword });
+      expect(newLoginRes.status).toBe(200);
+      expect(newLoginRes.body.success).toBe(true);
+
+      // Verify login with updated email succeeds
+      const emailLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: updatedEmail, password: studentPassword });
+      expect(emailLoginRes.status).toBe(200);
+      expect(emailLoginRes.body.success).toBe(true);
+
+      // Verify login with obsolete USN fails
+      const oldLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: initialUsn, password: studentPassword });
+      expect(oldLoginRes.status).toBe(401);
+      expect(oldLoginRes.body.success).toBe(false);
+
+      // Verify audit trail recorded ACCOUNT_UPDATED
+      const auditRes = await request(app)
+        .get('/api/audit-logs')
+        .set('Authorization', `Bearer ${technicalToken}`);
+      const updateAudit = auditRes.body.data.find(
+        (l: any) => l.action === 'ACCOUNT_UPDATED' && l.targetUserUsn === updatedUsn
+      );
+      expect(updateAudit).toBeDefined();
+    });
+
+    it('DELETE /api/users/:id should reject unauthorized requests and protect the sole Technical Administrator', async () => {
+      // Non-technical user forbidden
+      const resNonTech = await request(app)
+        .delete(`/api/users/${testStudentId}`)
+        .set('Authorization', `Bearer ${studentToken}`);
+      expect(resNonTech.status).toBe(403);
+
+      // Technical admin cannot delete sole active technical administrator
+      const techUser = memoryStore.users.find(u => u.role === 'technical' && u.usn === technicalUsn);
+      const techId = techUser?._id || techUser?.id;
+
+      const resSoleAdmin = await request(app)
+        .delete(`/api/users/${techId}`)
+        .set('Authorization', `Bearer ${technicalToken}`);
+      expect(resSoleAdmin.status).toBe(400);
+      expect(resSoleAdmin.body.message).toContain('sole active Technical Administrator');
+    });
+
+    it('DELETE /api/users/:id should permanently delete student account while safely unlinking associated records', async () => {
+      const deleteRes = await request(app)
+        .delete(`/api/users/${testStudentId}`)
+        .set('Authorization', `Bearer ${technicalToken}`)
+        .send({ reason: 'Student graduated / requested account closure' });
+
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.success).toBe(true);
+
+      // Verify student cannot log in after deletion
+      const loginAfterDelete = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: '1KI23IS099', password: studentPassword });
+      expect(loginAfterDelete.status).toBe(401);
+
+      // Verify user document is removed
+      const userInStore = memoryStore.users.find(u => (u._id || u.id) === testStudentId);
+      expect(userInStore).toBeUndefined();
+
+      // Verify team member was preserved and safely unlinked
+      const teamMemberAfter = memoryStore.teamMembers.find(tm => (tm._id || tm.id) === 'team_test_kavya');
+      expect(teamMemberAfter).toBeDefined();
+      expect(teamMemberAfter?.linkedUserId).toBeUndefined();
+      expect(teamMemberAfter?.accountLinkStatus).toBe('unlinked');
+
+      // Verify audit log recorded ACCOUNT_DELETED
+      const auditRes = await request(app)
+        .get('/api/audit-logs')
+        .set('Authorization', `Bearer ${technicalToken}`);
+      const deleteAudit = auditRes.body.data.find(
+        (l: any) => l.action === 'ACCOUNT_DELETED' && l.targetUserUsn === '1KI23IS099'
+      );
+      expect(deleteAudit).toBeDefined();
+    });
+  });
 });
 

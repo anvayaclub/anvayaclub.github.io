@@ -4,10 +4,15 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --color-plum-950: 14 5 21;
     --color-plum-900: 25 11 36;
     --color-ivory-50: 253 251 247;
     --color-gold-500: 201 152 27;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {

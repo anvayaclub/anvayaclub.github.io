@@ -37,3 +37,8 @@ Thumbs.db
 *.sln
 *.sw?
 tsconfig.tsbuildinfo
+
+# Agent skills & launch video artifacts
+.agents/
+skills-lock.json
+brag-output*

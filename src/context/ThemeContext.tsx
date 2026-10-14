@@ -21,10 +21,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const root = document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
+      root.style.colorScheme = 'dark';
     } else {
       root.classList.remove('dark');
+      root.style.colorScheme = 'light';
     }
     localStorage.setItem('anvaya_theme', theme);
+
+    // Update dynamic theme-color meta tag for mobile browser address bars
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', theme === 'dark' ? '#0E0515' : '#FDFBF7');
+    }
   }, [theme]);
 
   const toggleTheme = () => {

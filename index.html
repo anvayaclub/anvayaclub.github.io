@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Anvaya | Cultural Committee · ISE Department · KIT Tiptur</title>
     <meta name="description" content="Official web portal of Anvaya, the cultural committee and student community of Information Science & Engineering Department at Kalpataru Institute of Technology, Tiptur." />
+    <!-- Color Scheme & Browser Auto-Darkening Opt-Out (prevents mobile browsers from force-inverting light mode) -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E0515" media="(prefers-color-scheme: dark)" />
     <!-- Google Fonts for Editorial Headings and Crisp UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,6 +26,23 @@
           );
         }
       }(window.location))
+    </script>
+    <!-- Synchronous Theme Initializer: executes before first paint to eliminate FOUC and prevent browser forced-dark inversion -->
+    <script type="text/javascript">
+      (function() {
+        try {
+          var saved = localStorage.getItem('anvaya_theme');
+          var isDark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+          } else {
+            root.classList.remove('dark');
+            root.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
     </script>
   </head>
   <body class="bg-ivory-50 text-plum-950 dark:bg-plum-950 dark:text-ivory-50 antialiased selection:bg-gold-500 selection:text-white transition-colors duration-200">

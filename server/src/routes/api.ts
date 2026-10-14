@@ -12,6 +12,8 @@ import {
   resetUserPassword,
   getAuditLogs,
   getStudents,
+  updateUser,
+  deleteUser,
 } from '../controllers/authController.js';
 import { loginRateLimiter, setupRateLimiter } from '../middleware/rateLimiter.js';
 import { getRoles, getPermissions, createRole, updateRole, deleteRole } from '../controllers/roleController.js';
@@ -101,6 +103,8 @@ router.get('/auth/me', authenticateToken, getMe);
 // User Accounts & Privileges Management (Technical only)
 router.get('/users', authenticateToken, requireTechnical, getUsers);
 router.post('/users', authenticateToken, requireTechnical, createUser);
+router.put('/users/:id', authenticateToken, requireTechnical, updateUser);
+router.delete('/users/:id', authenticateToken, requireTechnical, deleteUser);
 router.patch('/users/:id/role', authenticateToken, requireTechnical, updateUserRole);
 router.patch('/users/:id/status', authenticateToken, requireTechnical, updateUserStatus);
 router.post('/users/:id/reset-password', authenticateToken, requireTechnical, resetUserPassword);

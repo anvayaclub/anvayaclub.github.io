@@ -6,6 +6,9 @@ import { User } from '../models/User.js';
 import { TeamMember } from '../models/TeamMember.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { Role } from '../models/Role.js';
+import { EventRegistration } from '../models/Event.js';
+import { Project } from '../models/Project.js';
+import { CertificateParticipant } from '../models/Certificate.js';
 import { isDbConnected } from '../config/db.js';
 import { memoryStore, SYSTEM_PERMISSIONS } from '../services/store.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -1209,3 +1212,413 @@ export const getAuditLogs = async (_req: AuthRequest, res: Response): Promise<vo
 
 // Legacy alias for student search in team linking
 export const getStudents = getUsers;
+
+// 12. User Management: Technical admin updates student account profile (name, USN, email, branch, semester)
+export const updateUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, usn, email, branch, semester } = req.body;
+
+    // Authorization safeguard: only technical/admin can edit accounts
+    if (req.user?.role !== 'technical' && req.user?.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Forbidden. Only Technical Administrators can update student accounts.' });
+      return;
+    }
+
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid or missing user account identifier.' });
+      return;
+    }
+
+    if (!name || !name.trim() || !usn || !usn.trim()) {
+      res.status(400).json({ success: false, message: 'Full Name and USN are required.' });
+      return;
+    }
+
+    const normalizedUsn = normalizeUsn(usn);
+    if (!isValidUsn(normalizedUsn)) {
+      res.status(400).json({ success: false, message: 'Please provide a valid 10-character USN (e.g. 1KI22IS001).' });
+      return;
+    }
+
+    const normalizedEmail = email && email.trim() ? email.trim().toLowerCase() : undefined;
+    if (normalizedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+        return;
+      }
+    }
+
+    if (isDbConnected()) {
+      const targetUser = await User.findById(id);
+      if (!targetUser) {
+        res.status(404).json({ success: false, message: 'User account not found.' });
+        return;
+      }
+
+      // Check USN uniqueness if USN changed
+      if (normalizedUsn !== targetUser.usn) {
+        const existingUsn = await User.findOne({ usn: normalizedUsn, _id: { $ne: targetUser._id } });
+        if (existingUsn) {
+          res.status(400).json({ success: false, message: `An account already exists with USN ${normalizedUsn}.` });
+          return;
+        }
+      }
+
+      // Check Email uniqueness if email changed
+      if (normalizedEmail && normalizedEmail !== targetUser.email) {
+        const existingEmail = await User.findOne({ email: normalizedEmail, _id: { $ne: targetUser._id } });
+        if (existingEmail) {
+          res.status(400).json({ success: false, message: `An account already exists with email ${normalizedEmail}.` });
+          return;
+        }
+      }
+
+      const oldUsn = targetUser.usn;
+      const oldName = targetUser.name;
+      const oldEmail = targetUser.email;
+
+      const changedFields: string[] = [];
+      if (targetUser.name !== name.trim()) changedFields.push('name');
+      if (targetUser.usn !== normalizedUsn) changedFields.push('usn');
+      if (targetUser.email !== normalizedEmail) changedFields.push('email');
+      if (branch && targetUser.branch !== branch.trim()) changedFields.push('branch');
+      if (semester && targetUser.semester !== semester.trim()) changedFields.push('semester');
+
+      targetUser.name = name.trim();
+      targetUser.usn = normalizedUsn;
+      targetUser.email = normalizedEmail;
+      if (branch) targetUser.branch = branch.trim();
+      if (semester) targetUser.semester = semester.trim();
+
+      await targetUser.save();
+
+      // Synchronize associated collections if USN or Name changed
+      if (normalizedUsn !== oldUsn || targetUser.name !== oldName) {
+        // 1. TeamMember synchronization
+        await TeamMember.updateMany(
+          { $or: [{ linkedUserId: targetUser._id }, { usn: oldUsn }] },
+          { usn: normalizedUsn, name: targetUser.name }
+        );
+
+        // 2. EventRegistration synchronization
+        await EventRegistration.updateMany(
+          { $or: [{ userId: targetUser._id }, { usn: oldUsn }] },
+          { usn: normalizedUsn, fullName: targetUser.name, email: normalizedEmail || '' }
+        );
+
+        // 3. Project author synchronization
+        await Project.updateMany(
+          { $or: [{ authorId: targetUser._id }, { authorUsn: oldUsn }] },
+          { authorUsn: normalizedUsn, authorName: targetUser.name }
+        );
+
+        // 4. CertificateParticipant synchronization (preserves certificate records under corrected USN)
+        await CertificateParticipant.updateMany(
+          { usn: oldUsn },
+          { usn: normalizedUsn, fullName: targetUser.name }
+        );
+      }
+
+      // Record Audit Log
+      await AuditLog.create({
+        action: 'ACCOUNT_UPDATED',
+        performedBy: req.user?.id as any,
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUser: targetUser._id,
+        targetUserName: targetUser.name,
+        targetUserUsn: normalizedUsn,
+        details: {
+          changedFields,
+          oldUsn,
+          newUsn: normalizedUsn,
+          oldEmail,
+          newEmail: normalizedEmail,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        success: true,
+        message: `Account for ${targetUser.name} updated successfully.`,
+        data: {
+          id: targetUser._id,
+          name: targetUser.name,
+          usn: targetUser.usn,
+          email: targetUser.email,
+          role: targetUser.role,
+          branch: targetUser.branch,
+          semester: targetUser.semester,
+          status: targetUser.status,
+          lastLogin: targetUser.lastLogin,
+        },
+      });
+    } else {
+      // Memory store fallback
+      const targetUser = memoryStore.users.find(u => (u._id || u.id) === id);
+      if (!targetUser) {
+        res.status(404).json({ success: false, message: 'User account not found.' });
+        return;
+      }
+
+      if (normalizedUsn !== targetUser.usn) {
+        const existingUsn = memoryStore.users.find(
+          u => (u._id || u.id) !== id && u.usn?.toUpperCase() === normalizedUsn
+        );
+        if (existingUsn) {
+          res.status(400).json({ success: false, message: `An account already exists with USN ${normalizedUsn}.` });
+          return;
+        }
+      }
+
+      if (normalizedEmail && normalizedEmail !== targetUser.email) {
+        const existingEmail = memoryStore.users.find(
+          u => (u._id || u.id) !== id && u.email?.toLowerCase() === normalizedEmail
+        );
+        if (existingEmail) {
+          res.status(400).json({ success: false, message: `An account already exists with email ${normalizedEmail}.` });
+          return;
+        }
+      }
+
+      const oldUsn = targetUser.usn;
+      const oldName = targetUser.name;
+      const oldEmail = targetUser.email;
+
+      const changedFields: string[] = [];
+      if (targetUser.name !== name.trim()) changedFields.push('name');
+      if (targetUser.usn !== normalizedUsn) changedFields.push('usn');
+      if (targetUser.email !== normalizedEmail) changedFields.push('email');
+
+      targetUser.name = name.trim();
+      targetUser.usn = normalizedUsn;
+      targetUser.email = normalizedEmail;
+      if (branch) targetUser.branch = branch.trim();
+      if (semester) targetUser.semester = semester.trim();
+
+      // Synchronize in memory
+      if (normalizedUsn !== oldUsn || targetUser.name !== oldName) {
+        memoryStore.teamMembers.forEach(tm => {
+          if (tm.linkedUserId === id || tm.usn?.toUpperCase() === oldUsn?.toUpperCase()) {
+            tm.usn = normalizedUsn;
+            tm.name = targetUser.name;
+          }
+        });
+
+        memoryStore.eventRegistrations.forEach(er => {
+          if (er.userId === id || er.usn?.toUpperCase() === oldUsn?.toUpperCase()) {
+            er.usn = normalizedUsn;
+            er.fullName = targetUser.name;
+            if (normalizedEmail) er.email = normalizedEmail;
+          }
+        });
+
+        memoryStore.projects.forEach(p => {
+          if (p.authorId === id || p.authorUsn?.toUpperCase() === oldUsn?.toUpperCase()) {
+            p.authorUsn = normalizedUsn;
+            p.authorName = targetUser.name;
+          }
+        });
+
+        memoryStore.certificateParticipants.forEach(cp => {
+          if (cp.usn?.toUpperCase() === oldUsn?.toUpperCase()) {
+            cp.usn = normalizedUsn;
+            cp.fullName = targetUser.name;
+          }
+        });
+      }
+
+      memoryStore.auditLogs.push({
+        _id: `audit_${Date.now()}`,
+        action: 'ACCOUNT_UPDATED',
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUserName: targetUser.name,
+        targetUserUsn: normalizedUsn,
+        details: { changedFields, oldUsn, newUsn: normalizedUsn, oldEmail, newEmail: normalizedEmail },
+        createdAt: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: `Account for ${targetUser.name} updated successfully.`,
+        data: {
+          id: targetUser._id || targetUser.id,
+          name: targetUser.name,
+          usn: targetUser.usn,
+          email: targetUser.email,
+          role: targetUser.role,
+          branch: targetUser.branch,
+          semester: targetUser.semester,
+          status: targetUser.status,
+          lastLogin: targetUser.lastLogin,
+        },
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update user account.' });
+  }
+};
+
+// 13. User Management: Technical admin permanently deletes an account
+export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    // Authorization safeguard: only technical/admin can delete accounts
+    if (req.user?.role !== 'technical' && req.user?.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Forbidden. Only Technical Administrators can delete accounts.' });
+      return;
+    }
+
+    if (!id || id === 'undefined' || id === 'null') {
+      res.status(400).json({ success: false, message: 'Invalid or missing user account identifier.' });
+      return;
+    }
+
+    if (isDbConnected()) {
+      const targetUser = await User.findById(id);
+      if (!targetUser) {
+        res.status(404).json({ success: false, message: 'User account not found.' });
+        return;
+      }
+
+      // Safeguard: Prevent deleting oneself if sole technical admin
+      if (req.user?.id === targetUser._id.toString() && targetUser.role === 'technical') {
+        const technicalCount = await User.countDocuments({ role: 'technical', status: 'active' });
+        if (technicalCount <= 1) {
+          res.status(400).json({
+            success: false,
+            message: 'Cannot delete your own account because you are the sole active Technical Administrator.',
+          });
+          return;
+        }
+      }
+
+      // Safeguard: Prevent deleting the last active technical administrator
+      if (targetUser.role === 'technical') {
+        const technicalCount = await User.countDocuments({ role: 'technical', status: 'active' });
+        if (technicalCount <= 1) {
+          res.status(400).json({
+            success: false,
+            message: 'Cannot delete the sole active Technical Administrator. Assign another Technical Administrator first.',
+          });
+          return;
+        }
+      }
+
+      const deletedUserName = targetUser.name;
+      const deletedUserUsn = targetUser.usn;
+      const deletedUserRole = targetUser.role;
+
+      // Safe Data-Integrity Unlinking:
+      // 1. Unlink any associated TeamMember record so committee history is preserved
+      await TeamMember.updateMany(
+        { linkedUserId: targetUser._id },
+        { $unset: { linkedUserId: 1 }, accountLinkStatus: 'unlinked' }
+      );
+
+      // 2. Unlink EventRegistration foreign key so event metrics/headcounts remain accurate
+      await EventRegistration.updateMany(
+        { userId: targetUser._id },
+        { $unset: { userId: 1 } }
+      );
+
+      // 3. Unlink Project author foreign key so projects showcase is preserved
+      await Project.updateMany(
+        { authorId: targetUser._id },
+        { $unset: { authorId: 1 } }
+      );
+
+      // 4. Delete the User authentication account
+      await User.findByIdAndDelete(targetUser._id);
+
+      // 5. Record Audit Log (permanently retained)
+      await AuditLog.create({
+        action: 'ACCOUNT_DELETED',
+        performedBy: req.user?.id as any,
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUserName: deletedUserName,
+        targetUserUsn: deletedUserUsn,
+        details: {
+          deletedRole: deletedUserRole,
+          reason: reason || 'Permanent administrative deletion',
+        },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        success: true,
+        message: `Account for ${deletedUserName} (${deletedUserUsn}) has been permanently deleted.`,
+      });
+    } else {
+      // Memory store fallback
+      const targetIndex = memoryStore.users.findIndex(u => (u._id || u.id) === id);
+      if (targetIndex === -1) {
+        res.status(404).json({ success: false, message: 'User account not found.' });
+        return;
+      }
+
+      const targetUser = memoryStore.users[targetIndex];
+
+      if (targetUser.role === 'technical') {
+        const technicalCount = memoryStore.users.filter(u => u.role === 'technical' && u.status === 'active').length;
+        if (technicalCount <= 1) {
+          res.status(400).json({
+            success: false,
+            message: 'Cannot delete the sole active Technical Administrator. Assign another Technical Administrator first.',
+          });
+          return;
+        }
+      }
+
+      const deletedUserName = targetUser.name;
+      const deletedUserUsn = targetUser.usn;
+      const deletedUserRole = targetUser.role;
+
+      // Unlink in memory
+      memoryStore.teamMembers.forEach(tm => {
+        if (tm.linkedUserId === id) {
+          delete tm.linkedUserId;
+          tm.accountLinkStatus = 'unlinked';
+        }
+      });
+
+      memoryStore.eventRegistrations.forEach(er => {
+        if (er.userId === id) {
+          delete er.userId;
+        }
+      });
+
+      memoryStore.projects.forEach(p => {
+        if (p.authorId === id) {
+          delete p.authorId;
+        }
+      });
+
+      memoryStore.users.splice(targetIndex, 1);
+
+      memoryStore.auditLogs.push({
+        _id: `audit_${Date.now()}`,
+        action: 'ACCOUNT_DELETED',
+        performedByName: req.user?.name || 'Administrator',
+        performedByRole: req.user?.role || 'technical',
+        targetUserName: deletedUserName,
+        targetUserUsn: deletedUserUsn,
+        details: { deletedRole: deletedUserRole, reason: reason || 'Permanent administrative deletion' },
+        createdAt: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: `Account for ${deletedUserName} (${deletedUserUsn}) has been permanently deleted.`,
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to delete user account.' });
+  }
+};

@@ -25,9 +25,11 @@ import {
 import { api } from '../../services/api';
 import { RoleItem, PermissionItem, User, AuditLogItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { COMMITTEE_ROLES, isCommitteeRole } from '../../constants/roles';
 
 export const AdminRoles: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'audit'>('users');
 
   // Roles & Permissions state
@@ -63,6 +65,25 @@ export const AdminRoles: React.FC = () => {
   const [newUserTempPassword, setNewUserTempPassword] = useState('');
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [savingUser, setSavingUser] = useState(false);
+
+  // Edit User Modal State
+  const [editUserModalOpen, setEditUserModalOpen] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editUsn, setEditUsn] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editBranch, setEditBranch] = useState('ISE');
+  const [editSemester, setEditSemester] = useState('6th Semester');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete User Modal State
+  const [deleteUserModalOpen, setDeleteUserModalOpen] = useState(false);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<User | null>(null);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Change Role Modal State
   const [changeRoleModalOpen, setChangeRoleModalOpen] = useState(false);
@@ -183,6 +204,103 @@ export const AdminRoles: React.FC = () => {
       error(err.message || 'Failed to create user account.');
     } finally {
       setSavingUser(false);
+    }
+  };
+
+  // Handle Edit User
+  const openEditUser = (targetUser: User) => {
+    setSelectedUserForEdit(targetUser);
+    setEditName(targetUser.name || '');
+    setEditUsn(targetUser.usn || '');
+    setEditEmail(targetUser.email || '');
+    setEditBranch(targetUser.branch || 'ISE');
+    setEditSemester(targetUser.semester || '6th Semester');
+    setEditError(null);
+    setEditUserModalOpen(true);
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForEdit) return;
+
+    const targetId = selectedUserForEdit.id || (selectedUserForEdit as any)._id;
+    if (!targetId) return;
+
+    if (!editName.trim() || !editUsn.trim() || !editEmail.trim()) {
+      setEditError('Full Name, USN, and Email are required.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const res = await api.users.update(targetId, {
+        name: editName.trim(),
+        usn: editUsn.trim().toUpperCase(),
+        email: editEmail.trim().toLowerCase(),
+        branch: editBranch.trim(),
+        semester: editSemester.trim(),
+      });
+
+      if (res.success) {
+        success(res.message || 'Student account updated and synchronized successfully.');
+        setEditUserModalOpen(false);
+        fetchUsers();
+      } else {
+        setEditError(res.message || 'Failed to update student account.');
+        error(res.message || 'Failed to update student account.');
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Failed to update student account.';
+      setEditError(msg);
+      error(msg);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Handle Delete User
+  const openDeleteUser = (targetUser: User) => {
+    setSelectedUserForDelete(targetUser);
+    setDeleteConfirmationText('');
+    setDeleteReason('');
+    setDeleteError(null);
+    setDeleteUserModalOpen(true);
+  };
+
+  const handleDeleteUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForDelete) return;
+
+    if (deleteConfirmationText.trim().toUpperCase() !== 'DELETE') {
+      setDeleteError('Please type DELETE in capital letters to confirm permanent deletion.');
+      return;
+    }
+
+    const targetId = selectedUserForDelete.id || (selectedUserForDelete as any)._id;
+    if (!targetId) return;
+
+    setDeletingUser(true);
+    setDeleteError(null);
+    try {
+      const res = await api.users.delete(targetId, {
+        reason: deleteReason.trim() || 'Permanent administrative deletion',
+      });
+
+      if (res.success) {
+        success(res.message || 'Student account permanently deleted.');
+        setDeleteUserModalOpen(false);
+        fetchUsers();
+      } else {
+        setDeleteError(res.message || 'Failed to delete user account.');
+        error(res.message || 'Failed to delete user account.');
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Failed to delete user account.';
+      setDeleteError(msg);
+      error(msg);
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -538,6 +656,15 @@ export const AdminRoles: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Edit Account Details */}
+                            <button
+                              onClick={() => openEditUser(u)}
+                              className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+                              title="Edit Student Account & USN Details"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Change Role Button */}
                             <button
                               onClick={() => {
@@ -577,11 +704,20 @@ export const AdminRoles: React.FC = () => {
                               className={`p-1.5 rounded-lg ${
                                 u.status === 'deactivated'
                                   ? 'text-emerald-600 hover:bg-emerald-500/10'
-                                  : 'text-red-500 hover:bg-red-500/10'
+                                  : 'text-amber-500 hover:bg-amber-500/10'
                               }`}
                               title={u.status === 'deactivated' ? 'Activate Account' : 'Deactivate Account'}
                             >
                               <Power className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Permanently Delete Account Button */}
+                            <button
+                              onClick={() => openDeleteUser(u)}
+                              className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10"
+                              title="Permanently Delete Account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -924,6 +1060,300 @@ export const AdminRoles: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT USER SIGNUP / PROFILE DETAILS & USN SYNCHRONIZATION */}
+      {/* ========================================================================= */}
+      {editUserModalOpen && selectedUserForEdit && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-plum-900 border border-ivory-200 dark:border-plum-800 shadow-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b border-ivory-200 dark:border-plum-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-gold-600" />
+                <h3 className="text-base font-serif font-bold text-plum-950 dark:text-ivory-50">
+                  Edit Student Account Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditUserModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-gold-500/10 border border-gold-500/20 text-gold-900 dark:text-gold-200 text-xs">
+              <p>
+                Updating this student's profile synchronizes their USN, name, and email across authentication credentials, Team & Accounts, event registrations, and submitted projects.
+              </p>
+            </div>
+
+            {editError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="e.g. Rohith Gowda"
+                  className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 focus:ring-1 focus:ring-gold-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                    USN <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUsn}
+                    onChange={e => setEditUsn(e.target.value.toUpperCase())}
+                    placeholder="1KI23IS045"
+                    className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 font-mono focus:ring-1 focus:ring-gold-500"
+                  />
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 block">
+                    Student uses this for login & team lookup.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                    Application Role
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={selectedUserForEdit.role}
+                    className="w-full px-3 py-2 rounded-xl bg-ivory-100 dark:bg-plum-950/50 border border-ivory-300 dark:border-plum-800 text-gray-500 cursor-not-allowed font-medium"
+                  />
+                  <span className="text-[10px] text-gray-400 mt-0.5 block">
+                    Use Key icon to change security role.
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                  Institutional Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  placeholder="student@kit-tiptur.ac.in"
+                  className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 focus:ring-1 focus:ring-gold-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                    Department / Branch
+                  </label>
+                  <select
+                    value={editBranch}
+                    onChange={e => setEditBranch(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 focus:ring-1 focus:ring-gold-500"
+                  >
+                    <option value="ISE">Information Science & Engineering (ISE)</option>
+                    <option value="CSE">Computer Science & Engineering (CSE)</option>
+                    <option value="AIML">Artificial Intelligence & ML (AIML)</option>
+                    <option value="ECE">Electronics & Communication (ECE)</option>
+                    <option value="ME">Mechanical Engineering (ME)</option>
+                    <option value="CV">Civil Engineering (CV)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                    Current Semester
+                  </label>
+                  <select
+                    value={editSemester}
+                    onChange={e => setEditSemester(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50 focus:ring-1 focus:ring-gold-500"
+                  >
+                    <option value="1st Semester">1st Semester</option>
+                    <option value="2nd Semester">2nd Semester</option>
+                    <option value="3rd Semester">3rd Semester</option>
+                    <option value="4th Semester">4th Semester</option>
+                    <option value="5th Semester">5th Semester</option>
+                    <option value="6th Semester">6th Semester</option>
+                    <option value="7th Semester">7th Semester</option>
+                    <option value="8th Semester">8th Semester</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-ivory-200 dark:border-plum-800">
+                <button
+                  type="button"
+                  onClick={() => setEditUserModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-ivory-300 dark:border-plum-800 text-gray-600 dark:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 rounded-xl font-semibold bg-gold-600 text-white hover:bg-gold-500 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  {savingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save & Synchronize</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: PERMANENT USER DELETION WITH SAFEGUARD */}
+      {/* ========================================================================= */}
+      {deleteUserModalOpen && selectedUserForDelete && (() => {
+        const targetUserId = selectedUserForDelete.id || (selectedUserForDelete as any)._id;
+        const currentUserId = currentUser?.id || (currentUser as any)?._id;
+        const isSelf = Boolean(
+          (currentUserId && currentUserId === targetUserId) ||
+          (currentUser?.usn && currentUser.usn.toUpperCase() === selectedUserForDelete.usn?.toUpperCase())
+        );
+        const activeTechnicalCount = users.filter(u => u.role === 'technical' && u.status !== 'deactivated').length;
+        const isSoleTechnicalAdmin = selectedUserForDelete.role === 'technical' && activeTechnicalCount <= 1;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-3xl bg-white dark:bg-plum-900 border border-ivory-200 dark:border-plum-800 shadow-2xl p-6 space-y-4 text-xs">
+              <div className="flex items-center justify-between border-b border-ivory-200 dark:border-plum-800 pb-3">
+                <div className="flex items-center gap-2 text-red-600 font-bold text-base font-serif">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                  <span>Permanently Delete Student Account</span>
+                </div>
+                <button
+                  onClick={() => setDeleteUserModalOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {isSoleTechnicalAdmin ? (
+                <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Protected Superuser Account</span>
+                  </div>
+                  <p>
+                    Cannot delete this account because <strong>{selectedUserForDelete.name}</strong> is the sole active Technical Administrator. You must promote another member to Technical Administrator before this account can be deleted.
+                  </p>
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteUserModalOpen(false)}
+                      className="px-4 py-2 rounded-xl bg-ivory-200 dark:bg-plum-800 text-gray-700 dark:text-gray-200 font-medium"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : isSelf ? (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Current Session Warning</span>
+                  </div>
+                  <p>
+                    You are currently signed in with this account (<strong>{selectedUserForDelete.name}</strong>). Deleting your own account will immediately terminate your session.
+                  </p>
+                </div>
+              ) : null}
+
+              {!isSoleTechnicalAdmin && (
+                <form onSubmit={handleDeleteUserSubmit} className="space-y-4">
+                  <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 text-xs space-y-1.5">
+                    <p className="font-semibold">
+                      This action permanently removes credentials for:
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5 font-mono text-[11px]">
+                      <li>Name: {selectedUserForDelete.name}</li>
+                      <li>USN: {selectedUserForDelete.usn}</li>
+                      <li>Email: {selectedUserForDelete.email || 'N/A'}</li>
+                      <li>Role: {selectedUserForDelete.role}</li>
+                    </ul>
+                    <p className="text-[11px] text-gray-600 dark:text-gray-400 pt-1">
+                      Safe Unlinking: Committee history, event attendance metrics, and projects showcase will be preserved without orphaned keys.
+                    </p>
+                  </div>
+
+                  {deleteError && (
+                    <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>{deleteError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-plum-900 dark:text-ivory-200 mb-1">
+                      Reason for Deletion (Audit Log)
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteReason}
+                      onChange={e => setDeleteReason(e.target.value)}
+                      placeholder="e.g. Student graduated / duplicate account / requested removal"
+                      className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-ivory-300 dark:border-plum-800 text-plum-950 dark:text-ivory-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-red-600 dark:text-red-400 mb-1">
+                      Type <span className="font-mono font-bold">DELETE</span> to confirm permanent deletion <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={deleteConfirmationText}
+                      onChange={e => setDeleteConfirmationText(e.target.value)}
+                      placeholder="Type DELETE"
+                      className="w-full px-3 py-2 rounded-xl bg-ivory-50 dark:bg-plum-950 border border-red-300 dark:border-red-900/50 text-plum-950 dark:text-ivory-50 font-mono tracking-wider focus:outline-none focus:ring-1 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-ivory-200 dark:border-plum-800">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteUserModalOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-ivory-300 dark:border-plum-800 text-gray-600 dark:text-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={deletingUser || deleteConfirmationText.trim().toUpperCase() !== 'DELETE'}
+                      className="px-4 py-2 rounded-xl font-semibold bg-red-600 text-white hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-sm"
+                    >
+                      {deletingUser && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>Permanently Delete</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MODAL 2: CHANGE ROLE WITH CONFIRMATION */}
