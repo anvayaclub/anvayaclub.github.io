@@ -57,7 +57,7 @@ export const Footer: React.FC = () => {
                 <InstagramIcon className="w-4 h-4" />
               </a>
               <a
-                href="https://youtube.com/@anvaya_kit"
+                href="https://youtube.com/@houseofanvaya-n2s?si=0vV7z51qHgdM1_xN"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-xl bg-ivory-200/80 dark:bg-plum-900/80 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"
@@ -66,7 +66,7 @@ export const Footer: React.FC = () => {
                 <YoutubeIcon className="w-4 h-4" />
               </a>
               <a
-                href="https://linkedin.com/company/anvaya-kit"
+                href="https://in.linkedin.com/in/anvaya-club-011908443"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-xl bg-ivory-200/80 dark:bg-plum-900/80 text-plum-700 dark:text-ivory-300 hover:text-gold-500 hover:scale-105 transition-all"

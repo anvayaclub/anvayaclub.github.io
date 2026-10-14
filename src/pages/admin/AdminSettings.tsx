@@ -12,8 +12,8 @@ export const AdminSettings: React.FC = () => {
   const [contactPhone, setContactPhone] = useState('+91 8431 674384');
   const [address, setAddress] = useState('KIT Campus, B.H. Road, Tiptur, Tumakuru District, Karnataka - 572201');
   const [instagram, setInstagram] = useState('https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr');
-  const [youtube, setYoutube] = useState('https://youtube.com/@anvaya_kit');
-  const [linkedin, setLinkedin] = useState('https://linkedin.com/company/anvaya-kit');
+  const [youtube, setYoutube] = useState('https://youtube.com/@houseofanvaya-n2s?si=0vV7z51qHgdM1_xN');
+  const [linkedin, setLinkedin] = useState('https://in.linkedin.com/in/anvaya-club-011908443');
   const [github, setGithub] = useState('https://github.com/anvayaclub');
   const [mapUrl, setMapUrl] = useState('https://maps.google.com/?q=Kalpataru+Institute+of+Technology+Tiptur');
 

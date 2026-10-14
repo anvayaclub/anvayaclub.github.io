@@ -99,9 +99,9 @@ const SiteSettingsSchema = new Schema<ISiteSettingsDocument>({
   address: { type: String, default: 'KIT Campus, B.H. Road, Tiptur, Tumakuru District, Karnataka - 572201' },
   socialLinks: {
     instagram: { type: String, default: 'https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr' },
-    youtube: { type: String, default: 'https://youtube.com/@anvaya_kit' },
+    youtube: { type: String, default: 'https://youtube.com/@houseofanvaya-n2s?si=0vV7z51qHgdM1_xN' },
     whatsapp: { type: String, default: '' },
-    linkedin: { type: String, default: 'https://linkedin.com/company/anvaya-kit' },
+    linkedin: { type: String, default: 'https://in.linkedin.com/in/anvaya-club-011908443' },
     github: { type: String, default: 'https://github.com/anvayaclub' },
     discord: { type: String, default: '' },
   },

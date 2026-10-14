@@ -688,9 +688,9 @@ export const memoryStore: MemoryStoreData = {
     address: 'KIT Campus, B.H. Road, Tiptur, Tumakuru District, Karnataka - 572201',
     socialLinks: {
       instagram: 'https://www.instagram.com/kit.anvaya.ise?cplk=d3pjdGYzbDU3M3Nr',
-      youtube: 'https://youtube.com/@anvaya_kit',
+      youtube: 'https://youtube.com/@houseofanvaya-n2s?si=0vV7z51qHgdM1_xN',
       whatsapp: '',
-      linkedin: 'https://linkedin.com/company/anvaya-kit',
+      linkedin: 'https://in.linkedin.com/in/anvaya-club-011908443',
       github: 'https://github.com/anvayaclub',
       discord: '',
     },
